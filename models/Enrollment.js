@@ -1,0 +1,36 @@
+const mongoose = require('mongoose');
+
+const enrollmentSchema = new mongoose.Schema({
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+        index: true,
+    },
+    courseId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Course",
+        required: true,
+        index: true,
+    },
+    progress: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100,
+    },
+    completedLessons: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Lesson"
+        }
+    ],
+    lastAccessedLesson: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Lesson"
+    },
+}, {
+    timestamps: true,
+})
+
+module.exports = mongoose.model('Enrollment', enrollmentSchema);
