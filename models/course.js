@@ -17,12 +17,13 @@ const courseSchema = new mongoose.Schema({
     },
     tags: [
         {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "Tag"
+            type: String,
+            trim: true,
         }
     ],
     instructorId: {
         type: mongoose.Schema.Types.ObjectId,
+        required: true,
         ref: "User"
     },
     isPublished: {
@@ -33,5 +34,8 @@ const courseSchema = new mongoose.Schema({
         type: Date
     }
 });
-
+courseSchema.index(
+    { title: 1, instructorId: 1 },
+    { unique: true }
+);
 module.exports = mongoose.model("Course", courseSchema);
