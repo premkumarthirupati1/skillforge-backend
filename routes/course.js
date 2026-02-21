@@ -6,5 +6,9 @@ const courseController = require('../controllers/course');
 
 const { protect } = require('../middlewares/protect');
 
-router.post('/create-course', protect, courseController.createCourse);
+const { authorizeRoles } = require('../middlewares/authorizeRoles');
+
+router.post('/create-course', protect, authorizeRoles("admin", "instructor"), courseController.createCourse);
+
+module.exports = router;
 

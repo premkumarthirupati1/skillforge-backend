@@ -1,7 +1,7 @@
 const User = require('../models/user');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-exports.registerUser = async ({ name, role, email, password }) => {
+const registerUser = async ({ name, role, email, password }) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
         throw new Error("User already exists");
@@ -26,7 +26,7 @@ exports.registerUser = async ({ name, role, email, password }) => {
     };
 };
 
-exports.loginUser = async ({ email, password }) => {
+const loginUser = async ({ email, password }) => {
     const user = await User.findOne({ email }).select("+password");
     if (!user) {
         throw new Error("Could not find this email.");
@@ -42,3 +42,5 @@ exports.loginUser = async ({ email, password }) => {
     );
     return { token, user: { id: user._id, email: user.email, role: user.role } };
 }
+
+module.exports = { registerUser, loginUser };
