@@ -8,8 +8,8 @@ const enrollmentController = require('../controllers/enrollment');
 
 const router = express.Router();
 
-router.post('/:courseId', protect, authorizeRoles("instructor"), enrollmentController.enrollInCourse);
+router.post('/get-courses', protect, authorizeRoles("instructor"), enrollmentController.getEnrollments);
 
-router.post('/enrollments', protect, authorizeRoles("instructor"), enrollmentController.getEnrollments);
+router.post('/:courseId', protect, authorizeRoles("instructor"), enrollmentController.enrollInCourse);
 
 module.exports = router;

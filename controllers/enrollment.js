@@ -12,13 +12,14 @@ exports.enrollInCourse = async (req, res, next) => {
         return res.status(400).json({ message: err.message });
     }
 }
+
 exports.getEnrollments = async (req, res, next) => {
-    const userId = req.user.id;
     try {
-        const result = await enrollmentService.getEnrollments({ userId });
-        return res.status(200).json(result);
-    }
-    catch (err) {
+        const userId = req.user.id;
+        const enrollments = await Enrollment.find({ userId })
+            .populate('courseId');
+        return res.status(200).json(enrollments);
+    } catch (err) {
         return res.status(400).json({ message: err.message });
     }
-}
+};
