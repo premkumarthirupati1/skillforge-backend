@@ -12,4 +12,4 @@ router.post('/get-courses', protect, authorizeRoles("instructor"), enrollmentCon
 
 router.post('/:courseId', protect, authorizeRoles("instructor"), enrollmentController.enrollInCourse);
 
-module.exports = router;
+module.exports = router; 
