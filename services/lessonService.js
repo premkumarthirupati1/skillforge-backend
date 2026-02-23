@@ -46,19 +46,20 @@ exports.completeLesson = async ({ lessonId }) => {
 
     let nextLesson = await Lesson.findOne({
         moduleId: module._id,
-        order: lesson.order + 1,
-    });
+        order: { $gt: lesson.order }
+    }).sort({ order: 1 });
 
     if (!nextLesson) {
-        let nextModule = await Module.findOne({
-            courseId: courseId,
-            order: module.order + 1,
-        });
+
+        const nextModule = await Module.findOne({
+            courseId,
+            order: { $gt: module.order }
+        }).sort({ order: 1 });
+
         if (nextModule) {
-            nextLesson = await Module.findOne({
-                moduleId: nextModule._id,
-                order: 1,
-            });
+            nextLesson = await Lesson.findOne({
+                moduleId: nextModule._id
+            }).sort({ order: 1 });
         }
     }
     enrollment.lastAccessedLesson = nextLesson ? nextLesson._id : lesson._id;

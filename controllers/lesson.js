@@ -10,3 +10,14 @@ exports.createLesson = async (req, res, next) => {
         next(err);
     }
 }
+
+exports.completedLesson = async (req, res, next) => {
+    const lessonId = req.params.lessonId;
+    try {
+        const result = await lessonService.completeLesson({ lessonId });
+        return res.status(201).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
