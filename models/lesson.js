@@ -30,13 +30,20 @@ const lessonSchema = new mongoose.Schema(
             type: Number,
             required: true,
             min: 1
+        },
+        isDeleted: {
+            type: Boolean,
+            default: false,
         }
     },
     {
         timestamps: true
     }
 );
-
+lessonSchema.pre(/^find/, function (next) {
+    this.where({ isDeleted: false });
+    next();
+});
 lessonSchema.index(
     { moduleId: 1, order: 1 },
     { unique: true }

@@ -13,8 +13,9 @@ exports.createLesson = async (req, res, next) => {
 
 exports.completedLesson = async (req, res, next) => {
     const lessonId = req.params.lessonId;
+    const userId = req.user.id;
     try {
-        const result = await lessonService.completeLesson({ lessonId });
+        const result = await lessonService.completeLesson({ lessonId, userId });
         return res.status(201).json(result);
     }
     catch (err) {

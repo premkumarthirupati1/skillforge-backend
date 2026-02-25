@@ -32,7 +32,15 @@ const courseSchema = new mongoose.Schema({
     },
     publishedAt: {
         type: Date
+    },
+    isDeleted: {
+        type: Boolean,
+        default: false,
     }
+});
+courseSchema.pre(/^find/, function (next) {
+    this.where({ isDeleted: false });
+    next();
 });
 courseSchema.index(
     { title: 1, instructorId: 1 },

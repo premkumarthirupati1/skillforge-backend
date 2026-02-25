@@ -9,3 +9,40 @@ exports.createCourse = async (req, res, next) => {
         next(err);
     }
 }
+
+exports.getCourseInfo = async (req, res, next) => {
+    const courseId = req.params.courseId;
+    const userId = req.user.id;
+    try {
+        const result = await courseService.getCourseInfo({ courseId, userId });
+        res.status(200).json({ result });
+    }
+    catch (err) {
+        next(err);
+    }
+}
+
+
+exports.publishCourse = async (req, res, next) => {
+    const courseId = req.params.courseId;
+    const userId = req.user.id;
+    try {
+        const result = await courseService.publishCourse({ courseId, userId });
+        return res.status(201).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+
+exports.deleteCourse = async (req, res, next) => {
+    const courseId = req.params.courseId;
+    const userId = req.user.id;
+    try {
+        const result = await courseService.deleteCourse({ courseId, userId });
+        return res.status(201).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}

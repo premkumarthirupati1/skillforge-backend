@@ -10,4 +10,6 @@ const lessonController = require('../controllers/lesson');
 
 router.post('/create-lesson', protect, authorizeRoles("instructor"), lessonController.createLesson);
 
+router.post('/:lessonId/complete', protect, authorizeRoles("student"), lessonController.completedLesson);
+
 module.exports = router;

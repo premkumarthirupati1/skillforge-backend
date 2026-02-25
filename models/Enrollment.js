@@ -29,9 +29,17 @@ const enrollmentSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "Lesson"
     },
+    isDeleted: {
+        type: Boolean,
+        default: false,
+    }
 }, {
     timestamps: true,
 })
+enrollmentSchema.pre(/^find/, function (next) {
+    this.where({ isDeleted: false });
+    next();
+});
 enrollmentSchema.index(
     { userId: 1, courseId: 1 },
     { unique: true }

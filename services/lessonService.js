@@ -18,7 +18,7 @@ const createLesson = async ({ moduleId, title, contentType, content, duration, o
     return lesson;
 }
 
-exports.completeLesson = async ({ lessonId }) => {
+const completeLesson = async ({ lessonId, userId }) => {
     const lesson = await Lesson.findById(lessonId);
     if (!lesson) {
         throw new Error("No lesson found!");
@@ -28,7 +28,7 @@ exports.completeLesson = async ({ lessonId }) => {
         throw new Error("No Module found!");
     }
     const courseId = module.courseId;
-    const userId = req.user.id;
+
     const enrollment = await Enrollment.findOne({ userId, courseId });
     if (!enrollment) {
         throw new Error("Not Enrolled in this course");
@@ -37,12 +37,17 @@ exports.completeLesson = async ({ lessonId }) => {
         enrollment.completedLessons.push(lessonId);
     }
     const modules = await Module.find({ courseId });
-    const moduleIds = module.map(m => m._id);
+    const moduleIds = modules.map(m => m._id);
     const totalLessons = await Lesson.countDocuments({
         moduleId: { $in: moduleIds }
     });
     const completedCount = enrollment.completedLessons.length;
-    enrollment.progress = (totalLessons === 0) ? 0 : (Math.round(completedCount / totalLessons) * 100);
+    console.log(completedCount);
+    console.log(totalLessons);
+    enrollment.progress =
+        totalLessons === 0
+            ? 0
+            : Math.round((completedCount / totalLessons) * 100);
 
     let nextLesson = await Lesson.findOne({
         moduleId: module._id,
@@ -73,4 +78,4 @@ exports.completeLesson = async ({ lessonId }) => {
     };
 }
 
-module.exports = { createLesson };
+module.exports = { createLesson, completeLesson };

@@ -10,5 +10,10 @@ const { authorizeRoles } = require('../middlewares/authorizeRoles');
 
 router.post('/create-course', protect, authorizeRoles("admin", "instructor"), courseController.createCourse);
 
+router.get('/:courseId/full', protect, authorizeRoles("student", "admin"), courseController.getCourseInfo);
+
+router.patch('/:courseId/publish', protect, authorizeRoles("instructor"), courseController.publishCourse);
+
+router.post('/:courseId/delete', protect, authorizeRoles("instructor", "admin"), courseController.deleteCourse);
 module.exports = router;
 
