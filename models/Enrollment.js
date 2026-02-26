@@ -37,6 +37,10 @@ const enrollmentSchema = new mongoose.Schema({
     timestamps: true,
 })
 enrollmentSchema.pre(/^find/, function (next) {
+    if (this.getQuery().includeDeleted) {
+        delete this.getQuery().includeDeleted;
+        return next();
+    }
     this.where({ isDeleted: false });
     next();
 });

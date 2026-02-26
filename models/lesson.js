@@ -41,6 +41,10 @@ const lessonSchema = new mongoose.Schema(
     }
 );
 lessonSchema.pre(/^find/, function (next) {
+    if (this.getQuery().includeDeleted) {
+        delete this.getQuery().includeDeleted;
+        return next();
+    }
     this.where({ isDeleted: false });
     next();
 });

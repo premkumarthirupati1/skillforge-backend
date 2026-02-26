@@ -38,9 +38,16 @@ const courseSchema = new mongoose.Schema({
         default: false,
     }
 });
-courseSchema.pre(/^find/, function (next) {
-    this.where({ isDeleted: false });
-    next();
+courseSchema.pre(/^find/, function () {
+    console.log("Query:", this.getQuery());
+    console.log("Options:", this.getOptions());
+
+    if (!this.getOptions().includeDeleted) {
+        console.log("Applying filter");
+        this.where({ isDeleted: false });
+    } else {
+        console.log("Bypassing filter");
+    }
 });
 courseSchema.index(
     { title: 1, instructorId: 1 },

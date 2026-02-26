@@ -14,6 +14,6 @@ router.get('/:courseId/full', protect, authorizeRoles("student", "admin"), cours
 
 router.patch('/:courseId/publish', protect, authorizeRoles("instructor"), courseController.publishCourse);
 
-router.post('/:courseId/delete', protect, authorizeRoles("instructor", "admin"), courseController.deleteCourse);
+router.delete('/:courseId/delete', protect, authorizeRoles("instructor", "admin"), courseController.deleteCourse);
 module.exports = router;
 

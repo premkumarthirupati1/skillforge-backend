@@ -37,10 +37,10 @@ exports.publishCourse = async (req, res, next) => {
 
 exports.deleteCourse = async (req, res, next) => {
     const courseId = req.params.courseId;
-    const userId = req.user.id;
+    const instructorId = req.user.id;
     try {
-        const result = await courseService.deleteCourse({ courseId, userId });
-        return res.status(201).json(result);
+        const result = await courseService.deleteCourse({ courseId, instructorId });
+        return res.status(200).json(result);
     }
     catch (err) {
         next(err);

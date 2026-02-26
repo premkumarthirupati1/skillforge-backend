@@ -69,47 +69,36 @@ exports.publishCourse = async ({ courseId, userId }) => {
     await course.save();
     return course;
 }
-
 exports.deleteCourse = async ({ courseId, instructorId }) => {
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        const course = await Course.findById(courseId).session(session);
+
+        const course = await Course
+            .findById(courseId)
+            .setOptions({ includeDeleted: true })
+            .session(session);
+
         if (!course) {
             throw new Error("Course not found!");
         }
-        if (!course.instructorId.toString() !== instructorId.toString()) {
-            throw new Error("Not Authorized!");
-        }
+
         course.isDeleted = true;
-        await Course.save({ session });
+        await course.save({ session });
 
-        await Module.updateMany(
-            { courseId },
-            { isDeleted: true },
-            { session }
-        );
-
-        const modules = await Module.find({ courseId }).session(session);
-        const moduleIds = modules.map(m => m._id);
-        await Lesson.updateMany(
-            { moduleId: { $in: { moduleIds } } },
-            { isDeleted: true },
-            { session }
-        );
-        await Enrollment.updateMany(
-            { courseId },
-            { isDeleted: true },
-            { session }
-        );
+        console.log("After save:", course.isDeleted); // ✅ HERE
+        console.log("Before commit");
         await session.commitTransaction();
+        console.log("After commit");
         session.endSession();
+
         return { message: "Course deleted successfully" };
-    }
-    catch (err) {
+
+    } catch (err) {
         await session.abortTransaction();
         session.endSession();
         throw err;
     }
-}
+};
