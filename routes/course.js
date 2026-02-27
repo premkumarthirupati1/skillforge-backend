@@ -14,6 +14,18 @@ router.get('/:courseId/full', protect, authorizeRoles("student", "admin"), cours
 
 router.patch('/:courseId/publish', protect, authorizeRoles("instructor"), courseController.publishCourse);
 
-router.delete('/:courseId/delete', protect, authorizeRoles("instructor", "admin"), courseController.deleteCourse);
+router.delete('/:courseId/delete',
+    protect,
+    authorizeRoles("instructor", "admin"),
+    courseController.deleteCourse
+);
+
+router.patch('/:courseId/restore',
+    protect,
+    authorizeRoles("instructor", "admin"),
+    courseController.restoreCourse
+);
+
+router.patch('/:courseId/restore-enrollments', protect, authorizeRoles("instructor", "admin"), courseController.restoreCourseEnrollments);
 module.exports = router;
 

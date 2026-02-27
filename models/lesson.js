@@ -40,13 +40,10 @@ const lessonSchema = new mongoose.Schema(
         timestamps: true
     }
 );
-lessonSchema.pre(/^find/, function (next) {
-    if (this.getQuery().includeDeleted) {
-        delete this.getQuery().includeDeleted;
-        return next();
+lessonSchema.pre(/^find/, function () {
+    if (!this.getOptions().includeDeleted) {
+        this.where({ isDeleted: false });
     }
-    this.where({ isDeleted: false });
-    next();
 });
 lessonSchema.index(
     { moduleId: 1, order: 1 },

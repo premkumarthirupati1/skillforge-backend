@@ -36,13 +36,28 @@ exports.publishCourse = async (req, res, next) => {
 }
 
 exports.deleteCourse = async (req, res, next) => {
-    const courseId = req.params.courseId;
-    const instructorId = req.user.id;
     try {
-        const result = await courseService.deleteCourse({ courseId, instructorId });
+        const result = await courseService.deleteCourse({
+            courseId: req.params.courseId,
+            instructorId: req.user.id
+        });
+
         return res.status(200).json(result);
+
+    } catch (err) {
+        next(err);
     }
-    catch (err) {
+};
+exports.restoreCourse = async (req, res, next) => {
+    try {
+        const result = await courseService.restoreCourse({
+            courseId: req.params.courseId,
+            instructorId: req.user.id
+        });
+
+        return res.status(200).json(result);
+
+    } catch (err) {
         next(err);
     }
 }

@@ -36,13 +36,10 @@ const enrollmentSchema = new mongoose.Schema({
 }, {
     timestamps: true,
 })
-enrollmentSchema.pre(/^find/, function (next) {
-    if (this.getQuery().includeDeleted) {
-        delete this.getQuery().includeDeleted;
-        return next();
+enrollmentSchema.pre(/^find/, function () {
+    if (!this.getOptions().includeDeleted) {
+        this.where({ isDeleted: false });
     }
-    this.where({ isDeleted: false });
-    next();
 });
 enrollmentSchema.index(
     { userId: 1, courseId: 1 },

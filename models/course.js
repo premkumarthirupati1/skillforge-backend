@@ -39,14 +39,8 @@ const courseSchema = new mongoose.Schema({
     }
 });
 courseSchema.pre(/^find/, function () {
-    console.log("Query:", this.getQuery());
-    console.log("Options:", this.getOptions());
-
     if (!this.getOptions().includeDeleted) {
-        console.log("Applying filter");
         this.where({ isDeleted: false });
-    } else {
-        console.log("Bypassing filter");
     }
 });
 courseSchema.index(

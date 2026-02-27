@@ -27,13 +27,10 @@ const moduleSchema = new mongoose.Schema(
         timestamps: true
     }
 );
-moduleSchema.pre(/^find/, function (next) {
-    if (this.getQuery().includeDeleted) {
-        delete this.getQuery().includeDeleted;
-        return next();
+moduleSchema.pre(/^find/, function () {
+    if (!this.getOptions().includeDeleted) {
+        this.where({ isDeleted: false });
     }
-    this.where({ isDeleted: false });
-    next();
 });
 moduleSchema.index(
     { courseId: 1, order: 1 },
