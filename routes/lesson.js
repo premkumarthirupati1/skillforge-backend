@@ -12,4 +12,6 @@ router.post('/create-lesson', protect, authorizeRoles("instructor"), lessonContr
 
 router.post('/:lessonId/complete', protect, authorizeRoles("student"), lessonController.completedLesson);
 
+router.patch('/:lessonId/update-lesson', protect, authorizeRoles("instructor", "admin"), lessonController.updateLesson);
+
 module.exports = router;

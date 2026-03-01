@@ -12,6 +12,8 @@ exports.signUpController = async (req, res, next) => {
 }
 exports.loginController = async (req, res, next) => {
     const { email, password } = req.body;
+    console.log(email);
+    console.log(password);
     try {
         const result = await authService.loginUser({ email, password });
         console.log("Login Successful!");

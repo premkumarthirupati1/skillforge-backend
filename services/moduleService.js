@@ -15,4 +15,42 @@ const createModule = async ({ courseId, title, order, instructorId }) => {
     })
     return module;
 }
-module.exports = { createModule };
+const updateModule = async ({ moduleId, instructorId, updatedData }) => {
+    const allowedFields = ["title", "order"];
+    const filteredUpdate = {};
+    for (const key of allowedFields) {
+        if (updatedData[key] !== undefined) {
+            filteredUpdate[key] = updatedData[key];
+        }
+    }
+    const module = await Module.findById(moduleId).setOptions({ includeDeleted: true });
+    if (!module) {
+        throw new Error("No such module found!");
+    }
+    const course = await Course.findById(module.courseId).setOptions({ includeDeleted: true });
+    if (!course) {
+        throw new Error("No such course is found!");
+    }
+    if (course.instructorId.toString() !== instructorId.toString()) {
+        throw new Error("Not Authorized!");
+    }
+    if (course.isPublished && updateData.order !== undefined) {
+        throw new Error("Cannot reorder modules after course is published");
+    }
+    Object.assign(module, filteredUpdate);
+    console.log(module);
+    try {
+        await module.save();
+    }
+    catch (err) {
+        if (err.code == 11000) {
+            throw new Error("Module already exists in this course.");
+        }
+        throw err;
+    }
+    return {
+        message: "Module updated Successfully!",
+        module
+    }
+}
+module.exports = { createModule, updateModule };

@@ -10,5 +10,6 @@ const router = express.Router();
 
 router.post('/:courseID', protect, authorizeRoles("instructor"), moduleController.createModule);
 
+router.patch('/:moduleId/update-module', protect, authorizeRoles("instructor", "admin"), moduleController.updateModule);
 
 module.exports = router;

@@ -18,6 +18,52 @@ const createLesson = async ({ moduleId, title, contentType, content, duration, o
     return lesson;
 }
 
+const updateLesson = async ({ lessonId, instructorId, updatedData }) => {
+    const allowedFields = ["title", "content", "contentType", "duration", "order"];
+    const filteredData = {};
+    for (const key of allowedFields) {
+        if (updatedData[key] !== undefined) {
+            filteredData[key] = updatedData[key];
+        }
+    }
+    const lesson = await Lesson.findById(lessonId).setOptions({
+        includeDelete: true
+    });
+    if (!lesson) {
+        throw new Error("Lesson not found!");
+    }
+    const module = await Module.findById(lesson.moduleId).setOptions({ includeDelete: true });
+    if (!module) {
+        throw new Error("Module not found!");
+    }
+    const course = await Course.findById(module.courseId).setOptions({
+        includeDelete: true
+    });
+    if (!course) {
+        throw new Error("Course not found!");
+    }
+    if (course.instructorId.toString() !== instructorId.toString()) {
+        throw new Error("Not Authorized!");
+    }
+    if (course.isPublished && updateData.order !== undefined) {
+        throw new Error("Cannot reorder lessons after course is published");
+    }
+    Object.assign(lesson, filteredData);
+    try {
+        await lesson.save();
+    }
+    catch (err) {
+        if (err.code === 11000) {
+            throw new Error("Duplication Key error!");
+        }
+        throw err;
+    }
+    return {
+        message: "Lesson updated Successfully",
+        lesson
+    }
+}
+
 const completeLesson = async ({ lessonId, userId }) => {
     const lesson = await Lesson.findById(lessonId);
     if (!lesson) {
@@ -29,22 +75,26 @@ const completeLesson = async ({ lessonId, userId }) => {
     }
     const courseId = module.courseId;
 
-    const enrollment = await Enrollment.findOne({ userId, courseId });
-    if (!enrollment) {
-        throw new Error("Not Enrolled in this course");
-    }
-    if (!enrollment.completedLessons.includes(lessonId)) {
-        enrollment.completedLessons.push(lessonId);
+    const updatedEnrollment = await Enrollment.findByIdAndUpdate(
+        { userId, courseId },
+        {
+            $addToSet: { completedLessons: lessonId },
+            $set: { lastAccessedLesson: lessonId }
+        },
+        { new: true }
+    );
+    if (!updatedEnrollment) {
+        throw new Error("Not Enrolled in this course!");
     }
     const modules = await Module.find({ courseId });
     const moduleIds = modules.map(m => m._id);
-    const totalLessons = await Lesson.countDocuments({
-        moduleId: { $in: moduleIds }
-    });
-    const completedCount = enrollment.completedLessons.length;
-    console.log(completedCount);
-    console.log(totalLessons);
-    enrollment.progress =
+    const totalLessons = await Lesson.countDocuments(
+        {
+            moduleId: { $in: moduleIds }
+        }
+    );
+    const completedCount = updatedEnrollment.completedLessons.length;
+    updatedEnrollment.progress =
         totalLessons === 0
             ? 0
             : Math.round((completedCount / totalLessons) * 100);
@@ -78,4 +128,4 @@ const completeLesson = async ({ lessonId, userId }) => {
     };
 }
 
-module.exports = { createLesson, completeLesson };
+module.exports = { createLesson, completeLesson, updateLesson };

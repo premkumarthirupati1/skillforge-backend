@@ -11,3 +11,16 @@ exports.createModule = async (req, res, next) => {
         return res.status(400).json({ message: err.message });
     }
 }
+exports.updateModule = async (req, res, next) => {
+    try {
+        const result = await moduleService.updateModule({
+            moduleId: req.params.moduleId,
+            instructorId: req.user.id,
+            updatedData: req.body
+        });
+        return res.status(200).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}

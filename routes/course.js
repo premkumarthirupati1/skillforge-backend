@@ -26,6 +26,8 @@ router.patch('/:courseId/restore',
     courseController.restoreCourse
 );
 
-router.patch('/:courseId/restore-enrollments', protect, authorizeRoles("instructor", "admin"), courseController.restoreCourseEnrollments);
+// router.patch('/:courseId/restore-enrollments', protect, authorizeRoles("instructor", "admin"), courseController.restoreCourseEnrollments);
+
+router.patch('/:courseId/update-course', protect, authorizeRoles("admin", "instructor"), courseController.updateCourse);
 module.exports = router;
 

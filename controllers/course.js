@@ -35,6 +35,19 @@ exports.publishCourse = async (req, res, next) => {
     }
 }
 
+exports.updateCourse = async (req, res, next) => {
+    const courseId = req.params.courseId;
+    const instructorId = req.user.id;
+    const updatedData = req.body;
+    try {
+        const result = await courseService.updateCourse({ courseId, instructorId, updatedData });
+        return res.status(200).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+
 exports.deleteCourse = async (req, res, next) => {
     try {
         const result = await courseService.deleteCourse({

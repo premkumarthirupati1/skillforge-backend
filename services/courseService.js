@@ -69,6 +69,36 @@ exports.publishCourse = async ({ courseId, userId }) => {
     await course.save();
     return course;
 }
+
+exports.updateCourse = async ({ courseId, instructorId, updatedData }) => {
+    const allowedFields = ["title", "description", "difficulty", "tags"];
+    const filteredUpdate = {};
+    for (const key of allowedFields) {
+        if (updatedData[key] !== undefined) {
+            filteredUpdate[key] = updatedData[key];
+        }
+    }
+    const course = await Course.findById(courseId).setOptions({ includeDeleted: true });
+    if (!course) {
+        throw new Error("Course not found!");
+    }
+    if (course.instructorId.toString() !== instructorId.toString()) {
+        throw new Error("Not Authorized!");
+    }
+    if (filteredUpdate.title) {
+        const existingTitle = await Course.findOne({
+            title: filteredUpdate.title,
+            instructorId,
+        });
+        if (existingTitle && existingTitle._id.toString() !== courseId) {
+            throw new Error("You already have a course with this title.");
+        }
+    }
+    Object.assign(course, filteredUpdate);
+    await course.save();
+    return { message: "Course updated Successfully!", course };
+}
+
 exports.deleteCourse = async ({ courseId, instructorId }) => {
     const session = await mongoose.startSession();
 
