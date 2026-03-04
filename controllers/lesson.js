@@ -29,6 +29,7 @@ exports.completedLesson = async (req, res, next) => {
     const userId = req.user.id;
     try {
         const result = await lessonService.completeLesson({ lessonId, userId });
+        console.log("passed");
         return res.status(201).json(result);
     }
     catch (err) {

@@ -65,17 +65,19 @@ const updateLesson = async ({ lessonId, instructorId, updatedData }) => {
 }
 
 const completeLesson = async ({ lessonId, userId }) => {
+
     const lesson = await Lesson.findById(lessonId);
     if (!lesson) {
-        throw new Error("No lesson found!");
+        throw new Error("Lesson not found");
     }
+
     const module = await Module.findById(lesson.moduleId);
     if (!module) {
-        throw new Error("No Module found!");
+        throw new Error("Module not found");
     }
-    const courseId = module.courseId;
 
-    const updatedEnrollment = await Enrollment.findByIdAndUpdate(
+    const courseId = module.courseId;
+    const enrollment = await Enrollment.findOneAndUpdate(
         { userId, courseId },
         {
             $addToSet: { completedLessons: lessonId },
@@ -83,21 +85,27 @@ const completeLesson = async ({ lessonId, userId }) => {
         },
         { new: true }
     );
-    if (!updatedEnrollment) {
-        throw new Error("Not Enrolled in this course!");
+
+    if (!enrollment) {
+        throw new Error("Not enrolled in this course");
     }
+
     const modules = await Module.find({ courseId });
     const moduleIds = modules.map(m => m._id);
-    const totalLessons = await Lesson.countDocuments(
-        {
-            moduleId: { $in: moduleIds }
-        }
-    );
-    const completedCount = updatedEnrollment.completedLessons.length;
-    updatedEnrollment.progress =
+
+    const totalLessons = await Lesson.countDocuments({
+        moduleId: { $in: moduleIds }
+    });
+
+    const completedCount = enrollment.completedLessons.length;
+
+    const progress =
         totalLessons === 0
             ? 0
             : Math.round((completedCount / totalLessons) * 100);
+
+    enrollment.progress = progress;
+    await enrollment.save();
 
     let nextLesson = await Lesson.findOne({
         moduleId: module._id,
@@ -105,7 +113,6 @@ const completeLesson = async ({ lessonId, userId }) => {
     }).sort({ order: 1 });
 
     if (!nextLesson) {
-
         const nextModule = await Module.findOne({
             courseId,
             order: { $gt: module.order }
@@ -117,15 +124,13 @@ const completeLesson = async ({ lessonId, userId }) => {
             }).sort({ order: 1 });
         }
     }
-    enrollment.lastAccessedLesson = nextLesson ? nextLesson._id : lesson._id;
-    await enrollment.save();
+
     return {
-        progress: enrollment.progress,
+        progress,
         nextLessonId: nextLesson ? nextLesson._id : null,
         message: nextLesson
-            ? "Lesson Completed"
-            : "Module Completed"
+            ? "Lesson completed"
+            : "Course completed"
     };
-}
-
+};
 module.exports = { createLesson, completeLesson, updateLesson };

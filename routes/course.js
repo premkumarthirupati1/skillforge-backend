@@ -10,7 +10,7 @@ const { authorizeRoles } = require('../middlewares/authorizeRoles');
 
 router.post('/create-course', protect, authorizeRoles("admin", "instructor"), courseController.createCourse);
 
-router.get('/:courseId/full', protect, authorizeRoles("student", "admin"), courseController.getCourseInfo);
+router.get('/:courseId/full', protect, authorizeRoles("student", "instructor", "admin"), courseController.getCourseInfo);
 
 router.patch('/:courseId/publish', protect, authorizeRoles("instructor"), courseController.publishCourse);
 
@@ -25,6 +25,8 @@ router.patch('/:courseId/restore',
     authorizeRoles("instructor", "admin"),
     courseController.restoreCourse
 );
+
+router.get('/instructor', protect, authorizeRoles("instructor", "admin"), courseController.getCourses);
 
 // router.patch('/:courseId/restore-enrollments', protect, authorizeRoles("instructor", "admin"), courseController.restoreCourseEnrollments);
 

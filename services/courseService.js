@@ -56,6 +56,11 @@ exports.getCourseInfo = async ({ courseId, userId }) => {
     };
 }
 
+exports.getCourses = async ({ userId }) => {
+    const courses = Course.find({ instructorId: userId, isDeleted: false }).sort({ createdAt: -1 });
+    return courses;
+}
+
 exports.publishCourse = async ({ courseId, userId }) => {
     const course = await Course.findById(courseId);
     if (!course) {
@@ -64,7 +69,7 @@ exports.publishCourse = async ({ courseId, userId }) => {
     if (course.instructorId.toString() !== userId.toString()) {
         throw new Error("Not Authorized to make changes in this Course.");
     }
-    course.isPublished = true;
+    course.isPublished = !course.isPublished;
     course.publishedAt = new Date();
     await course.save();
     return course;
