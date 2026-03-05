@@ -2,6 +2,7 @@ const Course = require('../models/course');
 const Module = require('../models/module');
 const createModule = async ({ courseId, title, order, instructorId }) => {
     const course = await Course.findById(courseId);
+    console.log(courseId);
     if (!course) {
         throw new Error("No course is available.");
     }
@@ -53,4 +54,17 @@ const updateModule = async ({ moduleId, instructorId, updatedData }) => {
         module
     }
 }
-module.exports = { createModule, updateModule };
+
+const getModule = async ({ moduleId }) => {
+    const module = Module.findById(moduleId);
+    if (!module) {
+        throw new Error("No Module found!");
+    }
+    return module;
+}
+
+const fetchModules = async ({ courseId }) => {
+    const modules = await Module.find({ courseId }).sort({ order: 1 });
+    return modules;
+};
+module.exports = { createModule, updateModule, fetchModules, getModule };
