@@ -29,8 +29,30 @@ exports.completedLesson = async (req, res, next) => {
     const userId = req.user.id;
     try {
         const result = await lessonService.completeLesson({ lessonId, userId });
-        console.log("passed");
         return res.status(201).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+
+exports.getLesson = async (req, res, next) => {
+    const lessonId = req.params.lessonId;
+    try {
+        const result = await lessonService.getLesson({ lessonId });
+        return res.status(200).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+
+exports.fetchLessons = async (req, res, next) => {
+    const moduleId = req.params.moduleId;
+    console.log(moduleId);
+    try {
+        const result = await lessonService.fetchLessons({ moduleId });
+        return res.status(200).json(result);
     }
     catch (err) {
         next(err);

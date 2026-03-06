@@ -45,7 +45,7 @@ const updateLesson = async ({ lessonId, instructorId, updatedData }) => {
     if (course.instructorId.toString() !== instructorId.toString()) {
         throw new Error("Not Authorized!");
     }
-    if (course.isPublished && updateData.order !== undefined) {
+    if (course.isPublished && updatedData.order !== undefined) {
         throw new Error("Cannot reorder lessons after course is published");
     }
     Object.assign(lesson, filteredData);
@@ -62,6 +62,16 @@ const updateLesson = async ({ lessonId, instructorId, updatedData }) => {
         message: "Lesson updated Successfully",
         lesson
     }
+}
+
+const fetchLessons = async ({ moduleId }) => {
+    const result = await Lesson.find({ moduleId }).sort({ order: 1 });
+    return result;
+}
+
+const getLesson = async ({ lessonId }) => {
+    const result = await Lesson.findById(lessonId);
+    return result;
 }
 
 const completeLesson = async ({ lessonId, userId }) => {
@@ -133,4 +143,4 @@ const completeLesson = async ({ lessonId, userId }) => {
             : "Course completed"
     };
 };
-module.exports = { createLesson, completeLesson, updateLesson };
+module.exports = { createLesson, completeLesson, updateLesson, fetchLessons, getLesson };
