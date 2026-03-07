@@ -8,6 +8,8 @@ const { protect } = require('../middlewares/protect');
 
 const { authorizeRoles } = require('../middlewares/authorizeRoles');
 
+router.get('/public', protect, authorizeRoles("admin", "instructor", "student"), courseController.showCourses);
+
 router.post('/create-course', protect, authorizeRoles("admin", "instructor"), courseController.createCourse);
 
 router.get('/:courseId/full', protect, authorizeRoles("student", "instructor", "admin"), courseController.getCourseInfo);

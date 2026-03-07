@@ -27,7 +27,17 @@ exports.getCourses = async (req, res, next) => {
     const userId = req.user.id;
     try {
         const result = await courseService.getCourses({ userId });
-        res.status(200).json(result);
+        return res.status(200).json(result);
+    }
+    catch (err) {
+        next(err);
+    }
+}
+
+exports.showCourses = async (req, res, next) => {
+    try {
+        const result = await courseService.showCourses();
+        return res.status(200).json(result);
     }
     catch (err) {
         next(err);

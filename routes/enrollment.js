@@ -10,6 +10,6 @@ const router = express.Router();
 
 router.post('/get-courses', protect, authorizeRoles("student"), enrollmentController.getEnrollments);
 
-router.post('/:courseId', protect, authorizeRoles("student"), enrollmentController.enrollInCourse);
+router.post('/:courseId/enroll', protect, authorizeRoles("student"), enrollmentController.enrollInCourse);
 
 module.exports = router; 

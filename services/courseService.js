@@ -52,12 +52,18 @@ exports.getCourseInfo = async ({ courseId, userId }) => {
     return {
         course,
         modules: structuredModules,
-        progress: enrollment?.progress || 0
+        progress: enrollment?.progress || 0,
+        isEnrolled: !!enrollment
     };
 }
 
 exports.getCourses = async ({ userId }) => {
     const courses = Course.find({ instructorId: userId, isDeleted: false }).sort({ createdAt: -1 });
+    return courses;
+}
+
+exports.showCourses = async () => {
+    const courses = await Course.find().setOptions({ includeDeleted: false });
     return courses;
 }
 
