@@ -7,6 +7,7 @@ const authRoutes = require('./routes/auth');
 const courseRoutes = require('./routes/course');
 const moduleRoutes = require('./routes/module');
 const lessonRoutes = require('./routes/lesson');
+const profileRoutes = require('./routes/profile');
 const errorHandler = require('./middlewares/errorHandler');
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
 const cors = require("cors");
@@ -15,6 +16,7 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
+app.use('/user', profileRoutes);
 app.use('/auth', authRoutes);
 app.use('/course', courseRoutes);
 app.use('/enrollments', enrollmentRoutes);

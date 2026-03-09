@@ -29,6 +29,9 @@ const userSchema = new mongoose.Schema(
     userProgress: {
       type: Number,
       default: 0
+    },
+    Bio: {
+      type: String,
     }
   },
   { timestamps: true }
