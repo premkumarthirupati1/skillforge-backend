@@ -3,7 +3,7 @@ const Lesson = require('../models/lesson');
 const Course = require('../models/course');
 const Enrollment = require('../models/Enrollment');
 const createLesson = async ({ moduleId, title, contentType, content, duration, order, instructorId }) => {
-    const module = await Module.findById(moduleId).populate('courseId');
+    const module = await Module.findById(moduleId);
     if (!module) {
         throw new Error("No such module available");
     }

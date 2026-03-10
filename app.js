@@ -10,6 +10,10 @@ const lessonRoutes = require('./routes/lesson');
 const profileRoutes = require('./routes/profile');
 const errorHandler = require('./middlewares/errorHandler');
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
+
+
+
+app.use('/uploads', express.static('uploads'));
 const cors = require("cors");
 app.use(cors({
     origin: "http://localhost:5173",

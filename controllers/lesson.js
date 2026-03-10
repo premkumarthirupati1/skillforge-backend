@@ -1,9 +1,15 @@
 const lessonService = require('../services/lessonService');
 exports.createLesson = async (req, res, next) => {
-    const { moduleId, title, contentType, content, duration, order } = req.body;
+    const { moduleId, title, contentType, duration, order } = req.body;
     const instructorId = req.user.id;
+    if (!req.file) {
+        return res.status(400).json({
+            message: "Lesson content file is required! (Video/Image/Document)"
+        })
+    }
+    const contentPath = req.file.path.replace(/\\/g, "/");
     try {
-        const result = await lessonService.createLesson({ moduleId, title, contentType, content, duration, order, instructorId });
+        const result = await lessonService.createLesson({ moduleId, title, contentType, content: contentPath, duration: Number(duration), order: Number(order), instructorId });
         return res.status(201).json(result);
     }
     catch (err) {
