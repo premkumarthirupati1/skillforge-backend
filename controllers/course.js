@@ -1,8 +1,11 @@
 const courseService = require('../services/courseService');
+const upload = require('../middlewares/upload');
 exports.createCourse = async (req, res, next) => {
-    const { title, description, difficulty, tags, instructorId, isPublished } = req.body;
+    const { title, description, difficulty, tags } = req.body;
+    console.log(req.body);
     try {
-        const result = await courseService.createCourse({ title, description, difficulty, tags, instructorId: req.user.id });
+        const thumbnailPath = req.file ? req.file.path.replace(/\\/g, "/") : "uploads/default-thumbnail.png";
+        const result = await courseService.createCourse({ title, description, difficulty, tags, instructorId: req.user.id, thumbnail: thumbnailPath });
         res.status(201).json({ result });
     }
     catch (err) {
@@ -60,8 +63,10 @@ exports.updateCourse = async (req, res, next) => {
     const courseId = req.params.courseId;
     const instructorId = req.user.id;
     const updatedData = req.body;
+    const thumbnail = req.file ? req.file.path.replace(/\\/g, "/") : "uploads/default-thumbnail.png";
+    updatedData["thumbnail"] = thumbnail;
     try {
-        const result = await courseService.updateCourse({ courseId, instructorId, updatedData });
+        const result = await courseService.updateCourse({ courseId, instructorId, updatedData, thumbnail });
         return res.status(200).json(result);
     }
     catch (err) {

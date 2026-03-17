@@ -17,7 +17,7 @@ router.post('/:lessonId/complete', protect, authorizeRoles("student"), lessonCon
 
 router.patch('/:lessonId/update-lesson', protect, authorizeRoles("instructor", "admin"), lessonController.updateLesson);
 
-router.get('/:lessonId/get-lesson', protect, authorizeRoles("instructor", "admin"), lessonController.getLesson);
+router.get('/get-lesson/:lessonId', protect, authorizeRoles("instructor", "admin", "student"), lessonController.getLesson);
 
 router.get('/:moduleId', protect, authorizeRoles("instructor", "admin"),
     lessonController.fetchLessons)

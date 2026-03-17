@@ -6,11 +6,13 @@ const courseController = require('../controllers/course');
 
 const { protect } = require('../middlewares/protect');
 
+const { upload } = require('../middlewares/upload');
+
 const { authorizeRoles } = require('../middlewares/authorizeRoles');
 
 router.get('/public', protect, authorizeRoles("admin", "instructor", "student"), courseController.showCourses);
 
-router.post('/create-course', protect, authorizeRoles("admin", "instructor"), courseController.createCourse);
+router.post('/create-course', protect, authorizeRoles("admin", "instructor"), upload.single('thumbnail'), courseController.createCourse);
 
 router.get('/:courseId/full', protect, authorizeRoles("student", "instructor", "admin"), courseController.getCourseInfo);
 
@@ -32,6 +34,6 @@ router.get('/instructor', protect, authorizeRoles("instructor", "admin"), course
 
 // router.patch('/:courseId/restore-enrollments', protect, authorizeRoles("instructor", "admin"), courseController.restoreCourseEnrollments);
 
-router.patch('/:courseId/update-course', protect, authorizeRoles("admin", "instructor"), courseController.updateCourse);
+router.patch('/:courseId/update-course', protect, authorizeRoles("admin", "instructor"), upload.single('thumbnail'), courseController.updateCourse);
 module.exports = router;
 

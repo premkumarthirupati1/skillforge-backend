@@ -36,6 +36,9 @@ const courseSchema = new mongoose.Schema({
     isDeleted: {
         type: Boolean,
         default: false,
+    },
+    thumbnail: {
+        type: String,
     }
 });
 courseSchema.pre(/^find/, function () {

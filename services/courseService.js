@@ -4,7 +4,7 @@ const Lesson = require('../models/lesson');
 const Enrollment = require('../models/Enrollment');
 const Module = require('../models/module');
 const mongoose = require('mongoose');
-exports.createCourse = async ({ title, description, difficulty, tags, instructorId }) => {
+exports.createCourse = async ({ title, description, difficulty, tags, instructorId, thumbnail }) => {
     const isFound = await Course.findOne({ title, instructorId });
     if (isFound) {
         throw new Error("You have already created this course.");
@@ -15,6 +15,7 @@ exports.createCourse = async ({ title, description, difficulty, tags, instructor
         difficulty,
         tags,
         instructorId,
+        thumbnail
     });
     const user = await User.findById(instructorId);
     if (!user) {
@@ -81,9 +82,10 @@ exports.publishCourse = async ({ courseId, userId }) => {
     return course;
 }
 
-exports.updateCourse = async ({ courseId, instructorId, updatedData }) => {
-    const allowedFields = ["title", "description", "difficulty", "tags"];
+exports.updateCourse = async ({ courseId, instructorId, updatedData, thumbnail }) => {
+    const allowedFields = ["title", "description", "difficulty", "tags", "thumbnail"];
     const filteredUpdate = {};
+
     for (const key of allowedFields) {
         if (updatedData[key] !== undefined) {
             filteredUpdate[key] = updatedData[key];

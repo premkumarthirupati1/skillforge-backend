@@ -1,5 +1,6 @@
 const Course = require('../models/course');
 const Module = require('../models/module');
+const Lesson = require('../models/lesson');
 const createModule = async ({ courseId, title, order, instructorId }) => {
     const course = await Course.findById(courseId);
     console.log(courseId);
@@ -56,11 +57,12 @@ const updateModule = async ({ moduleId, instructorId, updatedData }) => {
 }
 
 const getModule = async ({ moduleId }) => {
-    const module = Module.findById(moduleId);
+    const module = await Module.findById(moduleId);
     if (!module) {
         throw new Error("No Module found!");
     }
-    return module;
+    const lessons = await Lesson.find({ moduleId: moduleId });
+    return { module, lessons };
 }
 
 const fetchModules = async ({ courseId }) => {

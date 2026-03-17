@@ -29,7 +29,7 @@ exports.getModule = async (req, res, next) => {
     const moduleId = req.params.moduleId;
     try {
         const result = await moduleService.getModule({ moduleId });
-        res.status(200).json(result);
+        return res.status(200).json(result);
     }
     catch (err) {
         next(err);
@@ -39,7 +39,7 @@ exports.fetchModules = async (req, res, next) => {
     const courseId = req.params.courseId;
     try {
         const result = (await moduleService.fetchModules({ courseId }));
-        res.status(200).json(result);
+        return res.status(200).json(result);
     }
     catch (err) {
         next(err);

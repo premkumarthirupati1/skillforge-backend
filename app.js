@@ -12,8 +12,15 @@ const errorHandler = require('./middlewares/errorHandler');
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
 
 
-
+app.use((req, res, next) => {
+    res.setHeader(
+        "Content-Security-Policy",
+        "default-src 'self'; connect-src 'self' http://localhost:3000"
+    );
+    next();
+});
 app.use('/uploads', express.static('uploads'));
+app.use('/api/lessons', lessonRoutes);
 const cors = require("cors");
 app.use(cors({
     origin: "http://localhost:5173",

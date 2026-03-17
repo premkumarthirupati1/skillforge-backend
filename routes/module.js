@@ -15,5 +15,5 @@ router.patch('/:moduleId/update-module', protect, authorizeRoles("instructor", "
 router.get('/:courseId/get-modules', protect, authorizeRoles("instructor", "admin"), moduleController.fetchModules);
 module.exports = router;
 
-router.get('/:moduleId', protect, authorizeRoles("instructor", "admin"), moduleController.getModule);
+router.get('/:moduleId', protect, authorizeRoles("instructor", "admin", "student"), moduleController.getModule);
 
