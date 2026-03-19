@@ -1,11 +1,11 @@
 const courseService = require('../services/courseService');
 const upload = require('../middlewares/upload');
 exports.createCourse = async (req, res, next) => {
-    const { title, description, difficulty, tags } = req.body;
+    const { title, description, difficulty, tags, price } = req.body;
     console.log(req.body);
     try {
         const thumbnailPath = req.file ? req.file.path.replace(/\\/g, "/") : "uploads/default-thumbnail.png";
-        const result = await courseService.createCourse({ title, description, difficulty, tags, instructorId: req.user.id, thumbnail: thumbnailPath });
+        const result = await courseService.createCourse({ title, description, difficulty, tags, price, instructorId: req.user.id, thumbnail: thumbnailPath });
         res.status(201).json({ result });
     }
     catch (err) {
@@ -63,10 +63,11 @@ exports.updateCourse = async (req, res, next) => {
     const courseId = req.params.courseId;
     const instructorId = req.user.id;
     const updatedData = req.body;
-    const thumbnail = req.file ? req.file.path.replace(/\\/g, "/") : "uploads/default-thumbnail.png";
-    updatedData["thumbnail"] = thumbnail;
+    if (req.file) {
+        updatedData["thumbnail"] = req.file.path.replace(/\\/g, "/");
+    }
     try {
-        const result = await courseService.updateCourse({ courseId, instructorId, updatedData, thumbnail });
+        const result = await courseService.updateCourse({ courseId, instructorId, updatedData });
         return res.status(200).json(result);
     }
     catch (err) {

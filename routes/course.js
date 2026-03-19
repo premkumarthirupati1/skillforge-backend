@@ -10,7 +10,7 @@ const { upload } = require('../middlewares/upload');
 
 const { authorizeRoles } = require('../middlewares/authorizeRoles');
 
-router.get('/public', protect, authorizeRoles("admin", "instructor", "student"), courseController.showCourses);
+router.get('/public', courseController.showCourses);
 
 router.post('/create-course', protect, authorizeRoles("admin", "instructor"), upload.single('thumbnail'), courseController.createCourse);
 

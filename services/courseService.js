@@ -4,7 +4,7 @@ const Lesson = require('../models/lesson');
 const Enrollment = require('../models/Enrollment');
 const Module = require('../models/module');
 const mongoose = require('mongoose');
-exports.createCourse = async ({ title, description, difficulty, tags, instructorId, thumbnail }) => {
+exports.createCourse = async ({ title, description, difficulty, tags, instructorId, thumbnail, price }) => {
     const isFound = await Course.findOne({ title, instructorId });
     if (isFound) {
         throw new Error("You have already created this course.");
@@ -14,6 +14,7 @@ exports.createCourse = async ({ title, description, difficulty, tags, instructor
         description,
         difficulty,
         tags,
+        price,
         instructorId,
         thumbnail
     });
@@ -82,13 +83,23 @@ exports.publishCourse = async ({ courseId, userId }) => {
     return course;
 }
 
-exports.updateCourse = async ({ courseId, instructorId, updatedData, thumbnail }) => {
-    const allowedFields = ["title", "description", "difficulty", "tags", "thumbnail"];
+exports.updateCourse = async ({ courseId, instructorId, updatedData }) => {
+    const allowedFields = ["title", "description", "difficulty", "tags", "thumbnail", "price"];
     const filteredUpdate = {};
 
     for (const key of allowedFields) {
         if (updatedData[key] !== undefined) {
-            filteredUpdate[key] = updatedData[key];
+            if (key === "tags") {
+                try {
+                    const rawTags = updatedData.tags;
+                    const parsedTags = typeof rawTags === 'string' ? JSON.parse(rawTags) : rawTags;
+                    filteredUpdate.tags = Array.isArray(parsedTags) ? parsedTags : [];
+                } catch (e) {
+                    filteredUpdate.tags = [];
+                }
+            } else {
+                filteredUpdate[key] = updatedData[key];
+            }
         }
     }
     const course = await Course.findById(courseId).setOptions({ includeDeleted: true });
