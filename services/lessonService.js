@@ -73,74 +73,70 @@ const getLesson = async ({ lessonId }) => {
     const result = await Lesson.findById(lessonId);
     return result;
 }
-
 const completeLesson = async ({ lessonId, userId }) => {
-
     const lesson = await Lesson.findById(lessonId);
-    if (!lesson) {
-        throw new Error("Lesson not found");
-    }
+    if (!lesson) throw new Error("Lesson not found");
 
     const module = await Module.findById(lesson.moduleId);
-    if (!module) {
-        throw new Error("Module not found");
-    }
+    if (!module) throw new Error("Module not found");
 
     const courseId = module.courseId;
+
+    // Check if already completed to determine if we are ADDING or REMOVING
+    const currentEnrollment = await Enrollment.findOne({ userId, courseId });
+    if (!currentEnrollment) throw new Error("Not enrolled");
+
+    const isAlreadyComplete = currentEnrollment.completedLessons.includes(lessonId);
+
+    // Update Enrollment using $pull (remove) or $addToSet (add)
+    const updateAction = isAlreadyComplete
+        ? { $pull: { completedLessons: lessonId } }
+        : { $addToSet: { completedLessons: lessonId }, $set: { lastAccessedLesson: lessonId } };
+
     const enrollment = await Enrollment.findOneAndUpdate(
         { userId, courseId },
-        {
-            $addToSet: { completedLessons: lessonId },
-            $set: { lastAccessedLesson: lessonId }
-        },
+        updateAction,
         { new: true }
     );
 
-    if (!enrollment) {
-        throw new Error("Not enrolled in this course");
-    }
-
+    //Recalculate Progress (Logic remains same, but using updated enrollment)
     const modules = await Module.find({ courseId });
     const moduleIds = modules.map(m => m._id);
-
-    const totalLessons = await Lesson.countDocuments({
-        moduleId: { $in: moduleIds }
-    });
+    const totalLessons = await Lesson.countDocuments({ moduleId: { $in: moduleIds } });
 
     const completedCount = enrollment.completedLessons.length;
-
-    const progress =
-        totalLessons === 0
-            ? 0
-            : Math.round((completedCount / totalLessons) * 100);
+    const progress = totalLessons === 0 ? 0 : Math.round((completedCount / totalLessons) * 100);
 
     enrollment.progress = progress;
     await enrollment.save();
 
-    let nextLesson = await Lesson.findOne({
-        moduleId: module._id,
-        order: { $gt: lesson.order }
-    }).sort({ order: 1 });
-
-    if (!nextLesson) {
-        const nextModule = await Module.findOne({
-            courseId,
-            order: { $gt: module.order }
+    //  Find Next Lesson (Only if we just COMPLETED the lesson)
+    let nextLessonId = null;
+    if (!isAlreadyComplete) {
+        let nextLesson = await Lesson.findOne({
+            moduleId: module._id,
+            order: { $gt: lesson.order }
         }).sort({ order: 1 });
 
-        if (nextModule) {
-            nextLesson = await Lesson.findOne({
-                moduleId: nextModule._id
+        if (!nextLesson) {
+            const nextModule = await Module.findOne({
+                courseId,
+                order: { $gt: module.order }
             }).sort({ order: 1 });
-        }
-    }
 
+            if (nextModule) {
+                nextLesson = await Lesson.findOne({ moduleId: nextModule._id }).sort({ order: 1 });
+            }
+        }
+        nextLessonId = nextLesson ? nextLesson._id : null;
+    }
+    lesson.completed = !lesson.completed;
+    await lesson.save();
     return {
         progress,
-        nextLessonId: nextLesson ? nextLesson._id : null,
-        message: nextLesson
-            ? "Lesson completed"
-            : "Course completed"
+        isCompleted: !isAlreadyComplete, // Tell frontend the new state
+        nextLessonId,
+        message: isAlreadyComplete ? "Lesson unmarked" : (nextLessonId ? "Lesson completed" : "Course completed")
     };
 };
 module.exports = { createLesson, completeLesson, updateLesson, fetchLessons, getLesson };

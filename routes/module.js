@@ -16,4 +16,3 @@ router.get('/:courseId/get-modules', protect, authorizeRoles("instructor", "admi
 module.exports = router;
 
 router.get('/:moduleId', protect, authorizeRoles("instructor", "admin", "student"), moduleController.getModule);
-

@@ -13,7 +13,7 @@ const lessonController = require('../controllers/lesson');
 router.post('/create-lesson', protect, authorizeRoles("instructor"), upload.single('lessonFile'), lessonController.createLesson);
 
 
-router.post('/:lessonId/complete', protect, authorizeRoles("student"), lessonController.completedLesson);
+router.patch('/:lessonId/complete', protect, authorizeRoles("student"), lessonController.completedLesson);
 
 router.patch('/:lessonId/update-lesson', protect, authorizeRoles("instructor", "admin"), lessonController.updateLesson);
 

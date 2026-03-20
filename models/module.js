@@ -21,6 +21,10 @@ const moduleSchema = new mongoose.Schema(
         isDeleted: {
             type: Boolean,
             default: false
+        },
+        completed: {
+            type: Boolean,
+            default: false,
         }
     },
     {

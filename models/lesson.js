@@ -13,6 +13,10 @@ const lessonSchema = new mongoose.Schema(
             required: true,
             trim: true
         },
+        completed: {
+            type: Boolean,
+            default: false,
+        },
         contentType: {
             type: String,
             enum: ["video", "text", "quiz"],

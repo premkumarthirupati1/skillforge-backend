@@ -1,4 +1,5 @@
 const moduleService = require('../services/moduleService');
+const Lesson = require('../models/lesson');
 exports.createModule = async (req, res, next) => {
     const { title, order } = req.body;
     const instructorId = req.user.id;
