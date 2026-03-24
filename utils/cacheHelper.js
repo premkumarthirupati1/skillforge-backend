@@ -1,7 +1,7 @@
 const redisModule = require('./redisClient');
 const client = redisModule.default || redisModule;
 /**
- * Generic wrapper for caching any DB query
+ * wrapper for caching any DB query
  * @param {string} key - The Redis key
  * @param {number} ttl - Time to live in seconds
  * @param {function} fetchFunction - The original DB logic
