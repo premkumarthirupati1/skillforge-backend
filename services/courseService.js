@@ -4,6 +4,9 @@ const Lesson = require('../models/lesson');
 const Enrollment = require('../models/Enrollment');
 const Module = require('../models/module');
 const mongoose = require('mongoose');
+const { getCachedData } = require('../utils/cacheHelper');
+const redisModule = require('../utils/redisClient');
+const client = redisModule.default || redisModule;
 exports.createCourse = async ({ title, description, difficulty, tags, instructorId, thumbnail, price }) => {
     const isFound = await Course.findOne({ title, instructorId });
     if (isFound) {
@@ -18,6 +21,7 @@ exports.createCourse = async ({ title, description, difficulty, tags, instructor
         instructorId,
         thumbnail
     });
+    await client.del("all_courses_list");
     const user = await User.findById(instructorId);
     if (!user) {
         throw new Error("No Instructor found!");
@@ -65,8 +69,9 @@ exports.getCourses = async ({ userId }) => {
 }
 
 exports.showCourses = async () => {
-    const courses = await Course.find().setOptions({ includeDeleted: false });
-    return courses;
+    return await getCachedData("all_courses_list", 43200, async () => {
+        return await Course.find().setOptions({ includeDeleted: false });
+    })
 }
 
 exports.publishCourse = async ({ courseId, userId }) => {
@@ -175,7 +180,7 @@ exports.deleteCourse = async ({ courseId, instructorId }) => {
 
         await session.commitTransaction();
         session.endSession();
-
+        await client.del("all_courses_list");
         return { message: "Course deleted successfully" };
 
     } catch (err) {
