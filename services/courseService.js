@@ -5,13 +5,20 @@ const Enrollment = require('../models/Enrollment');
 const Module = require('../models/module');
 const mongoose = require('mongoose');
 const { getCachedData } = require('../utils/cacheHelper');
-const redisModule = require('../utils/redisClient');
-const client = redisModule.default || redisModule;
+const { connectRedis } = require('../utils/redisClient');
+
+let client;
+
+(async () => {
+    client = await connectRedis();
+})();
+
 exports.createCourse = async ({ title, description, difficulty, tags, instructorId, thumbnail, price }) => {
     const isFound = await Course.findOne({ title, instructorId });
     if (isFound) {
         throw new Error("You have already created this course.");
     }
+
     const course = await Course.create({
         title,
         description,
@@ -21,13 +28,19 @@ exports.createCourse = async ({ title, description, difficulty, tags, instructor
         instructorId,
         thumbnail
     });
-    await client.del("all_courses_list");
+
+    if (client) {
+        await client.del("all_courses_list");
+    }
+
     const user = await User.findById(instructorId);
     if (!user) {
         throw new Error("No Instructor found!");
     }
+
     user.courses.push({ courseId: course._id });
     await user.save();
+
     return { course };
 };
 
@@ -70,7 +83,7 @@ exports.getCourses = async ({ userId }) => {
 
 exports.showCourses = async () => {
     return await getCachedData("all_courses_list", 43200, async () => {
-        return await Course.find().setOptions({ includeDeleted: false });
+        return await Course.find().setOptions({ includeDeleted: false, isPublished: true });
     })
 }
 
@@ -82,6 +95,7 @@ exports.publishCourse = async ({ courseId, userId }) => {
     if (course.instructorId.toString() !== userId.toString()) {
         throw new Error("Not Authorized to make changes in this Course.");
     }
+    await client.del("all_courses_list");
     course.isPublished = !course.isPublished;
     course.publishedAt = new Date();
     await course.save();
