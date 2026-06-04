@@ -82,13 +82,11 @@ const completeLesson = async ({ lessonId, userId }) => {
 
     const courseId = module.courseId;
 
-    // Check if already completed to determine if we are ADDING or REMOVING
     const currentEnrollment = await Enrollment.findOne({ userId, courseId });
     if (!currentEnrollment) throw new Error("Not enrolled");
 
     const isAlreadyComplete = currentEnrollment.completedLessons.includes(lessonId);
 
-    // Update Enrollment using $pull (remove) or $addToSet (add)
     const updateAction = isAlreadyComplete
         ? { $pull: { completedLessons: lessonId } }
         : { $addToSet: { completedLessons: lessonId }, $set: { lastAccessedLesson: lessonId } };
@@ -99,7 +97,6 @@ const completeLesson = async ({ lessonId, userId }) => {
         { new: true }
     );
 
-    //Recalculate Progress (Logic remains same, but using updated enrollment)
     const modules = await Module.find({ courseId });
     const moduleIds = modules.map(m => m._id);
     const totalLessons = await Lesson.countDocuments({ moduleId: { $in: moduleIds } });
@@ -134,7 +131,7 @@ const completeLesson = async ({ lessonId, userId }) => {
     await lesson.save();
     return {
         progress,
-        isCompleted: !isAlreadyComplete, // Tell frontend the new state
+        isCompleted: !isAlreadyComplete,
         nextLessonId,
         message: isAlreadyComplete ? "Lesson unmarked" : (nextLessonId ? "Lesson completed" : "Course completed")
     };

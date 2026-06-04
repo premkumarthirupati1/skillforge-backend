@@ -1,3 +1,4 @@
+const { default: mongoose } = require('mongoose');
 const authService = require('../services/authService');
 
 exports.signUpController = async (req, res, next) => {
@@ -22,4 +23,19 @@ exports.loginController = async (req, res, next) => {
     catch (error) {
         res.status(400).json({ message: error.message });
     }
+}
+exports.forgotPasswordController = async (req, res, next) => {
+    const { email } = req.body;
+    try {
+        const result = await authService.forgotPassword({ email });
+        console.log("Password Reset Successful!");
+        return res.status(200).json(result);
+    }
+    catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+    res.json({ message: "Token valid, please enter new password" });
+}
+exports.forgotPasswordToken = async (req, res, next) => {
+    const { email }
 }
