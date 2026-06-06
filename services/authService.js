@@ -9,7 +9,7 @@ let transporter = nodemailer.createTransport({
     port: 587,
     auth: {
         user: "apikey",
-        pass: "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"
+        pass: process.env.SENDGRID_KEY
     }
 });
 const registerUser = async ({ name, role, email, password }) => {
