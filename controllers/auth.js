@@ -13,8 +13,6 @@ exports.signUpController = async (req, res, next) => {
 }
 exports.loginController = async (req, res, next) => {
     const { email, password } = req.body;
-    console.log(email);
-    console.log(password);
     try {
         const result = await authService.loginUser({ email, password });
         console.log("Login Successful!");
@@ -24,18 +22,38 @@ exports.loginController = async (req, res, next) => {
         res.status(400).json({ message: error.message });
     }
 }
-exports.forgotPasswordController = async (req, res, next) => {
-    const { email } = req.body;
+exports.forgotPasswordController = async (req, res) => {
     try {
+        const { email } = req.body;
         const result = await authService.forgotPassword({ email });
-        console.log("Password Reset Successful!");
-        return res.status(200).json(result);
+        if (result.success) {
+            return res.status(200).json({ message: result.message });
+        }
+        return res.status(400).json({ message: result.message });
+    } catch (err) {
+        return res.status(500).json({ message: "Server error", error: err.message });
     }
-    catch (err) {
-        res.status(400).json({ message: err.message });
+};
+
+exports.forgotPasswordTokenCheckController = async (req, res) => {
+    try {
+        const { token, email } = req.params;
+        await authService.forgotPasswordTokenCheck({ token, email }, res);
+    } catch (err) {
+        return res.status(500).json({ message: "Server error", error: err.message });
     }
-    res.json({ message: "Token valid, please enter new password" });
-}
-exports.forgotPasswordToken = async (req, res, next) => {
-    const { email }
-}
+};
+
+exports.resetPasswordController = async (req, res) => {
+    try {
+        const { email } = req.params;
+        const { password } = req.body;
+        const result = await authService.resetPassword({ email, password });
+        if (result.success) {
+            return res.status(200).json({ message: result.message });
+        }
+        return res.status(400).json({ message: result.message });
+    } catch (err) {
+        return res.status(500).json({ message: "Server error", error: err.message });
+    }
+};

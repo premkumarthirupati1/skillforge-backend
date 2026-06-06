@@ -20,7 +20,7 @@ const lessonSchema = new mongoose.Schema(
         contentType: {
             type: String,
             enum: ["video", "text", "quiz"],
-            required: tr
+            required: true
         },
         content: {
             type: String,
