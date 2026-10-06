@@ -43,8 +43,22 @@ const courseSchema = new mongoose.Schema({
     },
     thumbnail: {
         type: String,
+    },
+    averageRating: {
+        type: Number,
+        default: 0
+    },
+    reviewCount: {
+        type: Number,
+        default: 0
     }
 });
+courseSchema.index({
+    title: "text",
+    description: "text",
+    tags: "text"
+});
+
 courseSchema.pre(/^find/, function () {
     if (!this.getOptions().includeDeleted) {
         this.where({ isDeleted: false });
@@ -54,4 +68,4 @@ courseSchema.index(
     { title: 1, instructorId: 1 },
     { unique: true }
 );
-module.exports = mongoose.model("Course", courseSchema);
+module.exports = mongoose.models.Course || mongoose.model('Course', courseSchema);

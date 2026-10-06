@@ -26,9 +26,11 @@ const registerUser = async ({ name, role, email, password }) => {
         password: hashed,
     })
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const accessToken = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET + "_REFRESH", { expiresIn: '7d' });
     return {
-        token,
+        accessToken,
+        refreshToken,
         user: {
             id: user._id,
             email: user.email,
@@ -46,12 +48,17 @@ const loginUser = async ({ email, password }) => {
     if (!isEqual) {
         throw new Error("Invalid Credentials.");
     }
-    const token = jwt.sign(
+    const accessToken = jwt.sign(
         { id: user._id, role: user.role },
         process.env.JWT_SECRET,
-        { expiresIn: '1h' }
+        { expiresIn: '15m' }
     );
-    return { token, user: { id: user._id, email: user.email, role: user.role } };
+    const refreshToken = jwt.sign(
+        { id: user._id },
+        process.env.JWT_SECRET + "_REFRESH",
+        { expiresIn: '7d' }
+    );
+    return { accessToken, refreshToken, user: { id: user._id, email: user.email, role: user.role } };
 }
 const forgotPassword = async ({ email }) => {
     try {

@@ -14,6 +14,11 @@ const errorHandler = (err, req, res, next) => {
             message: err.message,
         });
     }
+    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError" || err.message === "Invalid authorization" || err.message === "Invalid Authorization" || err.message === "Not authorized!") {
+        return res.status(401).json({
+            message: "Unauthorized: Invalid or expired token",
+        });
+    }
     res.status(500).json({
         message: err.message || "Internal Server Error"
     });

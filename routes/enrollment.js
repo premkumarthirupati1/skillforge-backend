@@ -19,4 +19,17 @@ router.post(
   enrollmentController.enrollInCourse
 );
 
+router.get(
+  '/:courseId/progress',
+  protect,
+  authorizeRoles("student"),
+  enrollmentController.getSingleCourseProgress
+);
+router.patch(
+  '/:courseId/toggle-lesson',
+  protect,
+  authorizeRoles("student"),
+  enrollmentController.toggleLessonCompletion
+);
+
 module.exports = router;

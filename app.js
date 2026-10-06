@@ -9,17 +9,23 @@ const courseRoutes = require('./routes/course');
 const moduleRoutes = require('./routes/module');
 const lessonRoutes = require('./routes/lesson');
 const profileRoutes = require('./routes/profile');
+const reviewRoutes = require('./routes/review');
+const paymentRoutes = require('./routes/payment');
 const errorHandler = require('./middlewares/errorHandler');
+const cookieParser = require('cookie-parser');
 
 dotenv.config();
 
 const app = express();
+app.use(cookieParser());
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
+
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 app.use((req, res, next) => {
     res.setHeader(
         "Content-Security-Policy",
-        "default-src 'self'; connect-src 'self' http://localhost:3000"
+        `default-src 'self'; connect-src 'self' ${FRONTEND_URL}`
     );
     next();
 });
@@ -28,7 +34,7 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/lessons', lessonRoutes);
 
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: FRONTEND_URL,
     credentials: true
 }));
 
@@ -39,9 +45,11 @@ app.use('/course', courseRoutes);
 app.use('/enrollments', enrollmentRoutes);
 app.use('/modules', moduleRoutes);
 app.use('/lessons', lessonRoutes);
+app.use('/review', reviewRoutes);
+app.use('/payment', paymentRoutes);
 app.use(errorHandler);
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 mongoose.connect(MONGODB_URI)
     .then(() => {

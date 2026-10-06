@@ -61,4 +61,6 @@ router.patch(
   courseController.updateCourse
 );
 
+router.get("/search", courseController.searchCourses);
+
 module.exports = router;

@@ -40,6 +40,7 @@ exports.getCourses = async (req, res, next) => {
 exports.showCourses = async (req, res, next) => {
     try {
         const result = await courseService.showCourses();
+        console.log(result);
         return res.status(200).json(result);
     }
     catch (err) {
@@ -101,3 +102,13 @@ exports.restoreCourse = async (req, res, next) => {
         next(err);
     }
 }
+exports.searchCourses = async (req, res, next) => {
+    try {
+        const query = req.query.q || '';
+        const limit = req.query.limit || 5;
+        const results = await courseService.searchCourses({ query, limit });
+        return res.status(200).json(results);
+    } catch (err) {
+        next(err);
+    }
+};
