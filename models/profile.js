@@ -16,6 +16,10 @@ const ProfileSchema = new mongoose.Schema({
         type: String,
         maxLength: 500
     },
+    avatar: {
+        type: String,
+        default: ""
+    },
     socials: {
 
         twitter: {
