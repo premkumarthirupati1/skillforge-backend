@@ -86,8 +86,23 @@ exports.publishCourse = async ({ courseId, userId }) => {
     if (course.instructorId.toString() !== userId.toString()) {
         throw new Error("Not Authorized to make changes in this Course.");
     }
+
+    const willBePublished = !course.isPublished;
+
+    // If the course is being published, ensure no empty modules exist
+    if (willBePublished) {
+        const modules = await Module.find({ courseId, isDeleted: { $ne: true } });
+        for (const mod of modules) {
+            const lessonCount = await Lesson.countDocuments({ moduleId: mod._id, isDeleted: { $ne: true } });
+            if (lessonCount === 0) {
+                // Delete empty module
+                await Module.findByIdAndDelete(mod._id);
+            }
+        }
+    }
+
     await invalidateCache("all_courses_list");
-    course.isPublished = !course.isPublished;
+    course.isPublished = willBePublished;
     course.publishedAt = new Date();
     await course.save();
     return course;
