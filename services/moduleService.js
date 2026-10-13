@@ -1,6 +1,8 @@
 const Course = require('../models/course');
 const Module = require('../models/module');
 const Lesson = require('../models/lesson');
+const { invalidateCache } = require('../utils/cacheHelper');
+
 const createModule = async ({ courseId, title, order, instructorId }) => {
     const course = await Course.findById(courseId);
     console.log(courseId);
@@ -14,7 +16,8 @@ const createModule = async ({ courseId, title, order, instructorId }) => {
         courseId: courseId,
         title: title,
         order: order
-    })
+    });
+    await invalidateCache(`course_structure:${courseId}`);
     return module;
 }
 const updateModule = async ({ moduleId, instructorId, updatedData }) => {
@@ -43,6 +46,7 @@ const updateModule = async ({ moduleId, instructorId, updatedData }) => {
     console.log(module);
     try {
         await module.save();
+        await invalidateCache(`course_structure:${module.courseId}`);
     }
     catch (err) {
         if (err.code == 11000) {

@@ -5,6 +5,13 @@ const enrollmentController = require('../controllers/enrollment');
 
 const router = express.Router();
 
+router.get(
+  '/',
+  protect,
+  authorizeRoles("student", "instructor"),
+  enrollmentController.getEnrollments
+);
+
 router.post(
   '/get-courses',
   protect,

@@ -2,6 +2,8 @@ const Module = require('../models/module');
 const Lesson = require('../models/lesson');
 const Course = require('../models/course');
 const Enrollment = require('../models/Enrollment');
+const { invalidateCache } = require('../utils/cacheHelper');
+
 const createLesson = async ({ moduleId, title, contentType, content, duration, order, instructorId }) => {
     const module = await Module.findById(moduleId);
     if (!module) {
@@ -15,6 +17,7 @@ const createLesson = async ({ moduleId, title, contentType, content, duration, o
         duration,
         order
     });
+    await invalidateCache(`course_structure:${module.courseId}`);
     return lesson;
 }
 
@@ -51,6 +54,7 @@ const updateLesson = async ({ lessonId, instructorId, updatedData }) => {
     Object.assign(lesson, filteredData);
     try {
         await lesson.save();
+        await invalidateCache(`course_structure:${module.courseId}`);
     }
     catch (err) {
         if (err.code === 11000) {
@@ -106,6 +110,8 @@ const completeLesson = async ({ lessonId, userId }) => {
 
     enrollment.progress = progress;
     await enrollment.save();
+    await invalidateCache(`enrollments:${userId}`);
+    await invalidateCache(`enrollment:progress:${userId}:${courseId}`);
 
     //  Find Next Lesson (Only if we just COMPLETED the lesson)
     let nextLessonId = null;

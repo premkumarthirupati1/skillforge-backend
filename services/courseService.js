@@ -36,36 +36,57 @@ exports.createCourse = async ({ title, description, difficulty, tags, instructor
 };
 
 exports.getCourseInfo = async ({ courseId, userId }) => {
-    const course = await Course.findById(courseId).setOptions({ includeDeleted: true });
-    if (!course || (!course.isPublished && course.instructorId.toString() !== userId.toString())) {
+    // 1. Fetch static course architecture from cache (course + modules + lessons)
+    const cacheKey = `course_structure:${courseId}`;
+    const courseStructure = await getCachedData(cacheKey, 86400, async () => {
+        const course = await Course.findById(courseId).setOptions({ includeDeleted: true });
+        if (!course) return null;
+        const modules = await Module.find({ courseId, isDeleted: { $ne: true } }).sort({ order: 1 }).lean();
+        const moduleIds = modules.map(m => m._id);
+        const lessons = await Lesson.find({ moduleId: { $in: moduleIds }, isDeleted: { $ne: true } }).sort({ order: 1 }).lean();
+        return {
+            course: course.toObject ? course.toObject() : course,
+            modules,
+            lessons
+        };
+    });
+
+    if (!courseStructure || !courseStructure.course) {
         throw new Error("Course is not available.");
     }
-    const modules = await Module.find({ courseId }).sort({ order: 1 });
-    const moduleIds = modules.map(m => m._id);
-    const lessons = await Lesson.find({ moduleId: { $in: moduleIds } }).sort({ order: 1 });
+
+    const { course, modules, lessons } = courseStructure;
+
+    if (!course.isPublished && course.instructorId.toString() !== userId.toString()) {
+        throw new Error("Course is not available.");
+    }
+
+    // 2. Fetch user-specific enrollment
     const enrollment = await Enrollment.findOne({
         userId,
         courseId
     });
+
     const structuredModules = modules.map(module => {
         const moduleLessons = lessons
-            .filter(lesson => lesson.moduleId.toString() === module._id.toString())
+            .filter(lesson => (lesson.moduleId?._id || lesson.moduleId).toString() === (module._id).toString())
             .map(lesson => ({
-                ...lesson.toObject(),
-                completed: enrollment?.completedLessons.includes(lesson._id)
+                ...lesson,
+                completed: enrollment?.completedLessons?.some(cl => cl.toString() === lesson._id.toString()) || false
             }));
         return {
-            ...module.toObject(),
+            ...module,
             lessons: moduleLessons,
         };
     });
+
     return {
         course,
         modules: structuredModules,
         progress: enrollment?.progress || 0,
         isEnrolled: !!enrollment
     };
-}
+};
 
 exports.getCourses = async ({ userId }) => {
     const courses = Course.find({ instructorId: userId, isDeleted: false }).sort({ createdAt: -1 });
@@ -102,6 +123,7 @@ exports.publishCourse = async ({ courseId, userId }) => {
     }
 
     await invalidateCache("all_courses_list");
+    await invalidateCache(`course_structure:${courseId}`);
     course.isPublished = willBePublished;
     course.publishedAt = new Date();
     await course.save();
@@ -146,6 +168,7 @@ exports.updateCourse = async ({ courseId, instructorId, updatedData }) => {
     Object.assign(course, filteredUpdate);
     await course.save();
     await invalidateCache("all_courses_list");
+    await invalidateCache(`course_structure:${courseId}`);
     return { message: "Course updated Successfully!", course };
 }
 
@@ -202,6 +225,7 @@ exports.deleteCourse = async ({ courseId, instructorId }) => {
         await session.commitTransaction();
         session.endSession();
         await invalidateCache("all_courses_list");
+        await invalidateCache(`course_structure:${courseId}`);
         return { message: "Course deleted successfully" };
 
     } catch (err) {
@@ -258,6 +282,7 @@ exports.restoreCourse = async ({ courseId, instructorId }) => {
         await session.commitTransaction();
         session.endSession();
         await invalidateCache("all_courses_list");
+        await invalidateCache(`course_structure:${courseId}`);
 
         return { message: "Course Restored successfully" };
 
@@ -274,10 +299,14 @@ exports.searchCourses = async ({ query, limit = 5 }) => {
     }
 
     const trimmedQuery = query.trim();
-    const tokens = trimmedQuery.split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) {
-        return [];
-    }
+    const lowerQuery = trimmedQuery.toLowerCase();
+    const cacheKey = `search:${lowerQuery}:${limit}`;
+
+    return await getCachedData(cacheKey, 600, async () => {
+        const tokens = trimmedQuery.split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) {
+            return [];
+        }
 
     const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -330,5 +359,6 @@ exports.searchCourses = async ({ query, limit = 5 }) => {
         return 0;
     });
 
-    return sortedCourses.slice(0, Math.max(1, Number(limit) || 5));
+        return sortedCourses.slice(0, Math.max(1, Number(limit) || 5));
+    });
 };
