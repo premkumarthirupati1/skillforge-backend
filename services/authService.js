@@ -4,14 +4,30 @@ const jwt = require('jsonwebtoken');
 const user = require('../models/user');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto')
-let transporter = nodemailer.createTransport({
-    host: "smtp.sendgrid.net",
-    port: 587,
-    auth: {
-        user: "apikey",
-        pass: process.env.SENDGRID_KEY
+const getTransporter = () => {
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        return nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            }
+        });
     }
-});
+
+    if (process.env.SENDGRID_KEY) {
+        return nodemailer.createTransport({
+            host: "smtp.sendgrid.net",
+            port: 587,
+            auth: {
+                user: "apikey",
+                pass: process.env.SENDGRID_KEY
+            }
+        });
+    }
+
+    return null;
+};
 const registerUser = async ({ name, role, email, password }) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -78,8 +94,9 @@ const forgotPassword = async ({ email }) => {
         const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
         const resetLink = `${frontendUrl}/auth/forgot-password/${token}?email=${encodeURIComponent(email)}`;
 
+        const senderEmail = process.env.EMAIL_USER || process.env.EMAIL_FROM || "support@skillforge.com";
         const mailOptions = {
-            from: process.env.EMAIL_FROM || "support@skillforge.com",
+            from: `"SkillForge Support" <${senderEmail}>`,
             to: email,
             subject: "SkillForge - Password Reset Request",
             html: `
@@ -107,11 +124,19 @@ const forgotPassword = async ({ email }) => {
             `
         };
 
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (mailError) {
-            console.warn("⚠️ Email delivery note:", mailError.message);
-            // Log link for local development/testing so developer is never blocked
+        const transporter = getTransporter();
+        if (transporter) {
+            try {
+                await transporter.sendMail(mailOptions);
+                console.log(`✅ Password reset email successfully delivered to ${email}`);
+            } catch (mailError) {
+                console.warn("⚠️ Email delivery note:", mailError.message);
+                console.log("\n=======================================================");
+                console.log("🔗 [DEV] PASSWORD RESET LINK FOR " + email + ":");
+                console.log(resetLink);
+                console.log("=======================================================\n");
+            }
+        } else {
             console.log("\n=======================================================");
             console.log("🔗 [DEV] PASSWORD RESET LINK FOR " + email + ":");
             console.log(resetLink);
