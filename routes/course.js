@@ -3,6 +3,7 @@ const courseController = require('../controllers/course');
 const { protect } = require('../middlewares/protect');
 const { upload } = require('../middlewares/upload');
 const { authorizeRoles } = require('../middlewares/authorizeRoles');
+const { searchLimiter } = require('../middlewares/rateLimiter');
 
 const router = express.Router();
 
@@ -61,6 +62,6 @@ router.patch(
   courseController.updateCourse
 );
 
-router.get("/search", courseController.searchCourses);
+router.get("/search", searchLimiter, courseController.searchCourses);
 
 module.exports = router;

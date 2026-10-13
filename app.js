@@ -13,10 +13,12 @@ const reviewRoutes = require('./routes/review');
 const paymentRoutes = require('./routes/payment');
 const errorHandler = require('./middlewares/errorHandler');
 const cookieParser = require('cookie-parser');
+const { globalLimiter } = require('./middlewares/rateLimiter');
 
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(cookieParser());
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
 
@@ -38,6 +40,7 @@ app.use(cors({
     credentials: true
 }));
 
+app.use(globalLimiter);
 app.use(express.json());
 app.use('/user', profileRoutes);
 app.use('/auth', authRoutes);
