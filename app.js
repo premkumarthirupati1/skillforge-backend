@@ -22,12 +22,18 @@ app.set('trust proxy', 1);
 app.use(cookieParser());
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
 
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173"
+].filter(Boolean);
 
 app.use((req, res, next) => {
+    const connectSources = allowedOrigins.join(" ");
     res.setHeader(
         "Content-Security-Policy",
-        `default-src 'self'; connect-src 'self' ${FRONTEND_URL}`
+        `default-src 'self'; connect-src 'self' ${connectSources}`
     );
     next();
 });
@@ -36,7 +42,13 @@ app.use('/uploads', express.static('uploads'));
 app.use('/api/lessons', lessonRoutes);
 
 app.use(cors({
-    origin: FRONTEND_URL,
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 
