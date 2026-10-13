@@ -91,7 +91,7 @@ const forgotPassword = async ({ email }) => {
         user.resetTokenExpiry = Date.now() + 15 * 60 * 1000; // 15 minutes expiry
         await user.save();
 
-        const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+        const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, '');
         const resetLink = `${frontendUrl}/auth/forgot-password/${token}?email=${encodeURIComponent(email)}`;
 
         const senderEmail = process.env.EMAIL_USER || process.env.EMAIL_FROM || "support@skillforge.com";

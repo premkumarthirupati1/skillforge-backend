@@ -22,8 +22,9 @@ app.set('trust proxy', 1);
 app.use(cookieParser());
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
 
+const configuredFrontend = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/+$/, '') : null;
 const allowedOrigins = [
-    process.env.FRONTEND_URL,
+    configuredFrontend,
     "http://localhost:5173",
     "http://localhost:3000",
     "http://127.0.0.1:5173"
