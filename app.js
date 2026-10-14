@@ -56,16 +56,46 @@ app.use(cors({
 app.use(globalLimiter);
 app.use(express.json());
 
+const nodemailer = require('nodemailer');
+
 app.get('/health', (req, res) => {
     const hasSmtpConfigured = !!(process.env.EMAIL_USER || true);
     res.json({
         status: "ok",
-        version: "1.0.4-with-smtp-fallback",
+        version: "1.0.5-with-email-tester",
         frontendUrl: process.env.FRONTEND_URL || "https://skillforge-frontend-aijn.vercel.app",
         hasEmailUser: !!process.env.EMAIL_USER,
         hasEmailPass: !!process.env.EMAIL_PASS,
         smtpActive: hasSmtpConfigured
     });
+});
+
+app.get('/test-email', async (req, res) => {
+    const to = req.query.to || "thirupatipremkumar1@gmail.com";
+    const emailUser = process.env.EMAIL_USER || "skillforge.noreply@gmail.com";
+    const emailPass = process.env.EMAIL_PASS || "laxx wion xwlu kaaj";
+
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user: emailUser, pass: emailPass },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000
+    });
+
+    try {
+        const verify = await transporter.verify();
+        const info = await transporter.sendMail({
+            from: `"SkillForge Support" <${emailUser}>`,
+            to,
+            subject: "Render Direct Test",
+            text: "Testing Render email delivery directly from API."
+        });
+        res.json({ success: true, verify, info: info.response });
+    } catch (err) {
+        console.error("Test email error:", err);
+        res.status(500).json({ success: false, error: err.message, code: err.code, stack: err.stack });
+    }
 });
 
 app.use('/user', profileRoutes);
