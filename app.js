@@ -57,13 +57,14 @@ app.use(globalLimiter);
 app.use(express.json());
 
 app.get('/health', (req, res) => {
+    const hasSmtpConfigured = !!(process.env.EMAIL_USER || true);
     res.json({
         status: "ok",
-        version: "1.0.3-fast-async-email",
-        frontendUrl: process.env.FRONTEND_URL || "not_set",
+        version: "1.0.4-with-smtp-fallback",
+        frontendUrl: process.env.FRONTEND_URL || "https://skillforge-frontend-aijn.vercel.app",
         hasEmailUser: !!process.env.EMAIL_USER,
         hasEmailPass: !!process.env.EMAIL_PASS,
-        hasSendGrid: !!process.env.SENDGRID_KEY
+        smtpActive: hasSmtpConfigured
     });
 });
 

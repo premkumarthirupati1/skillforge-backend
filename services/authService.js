@@ -5,12 +5,15 @@ const user = require('../models/user');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto')
 const getTransporter = () => {
-    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    const emailUser = process.env.EMAIL_USER || "skillforge.noreply@gmail.com";
+    const emailPass = process.env.EMAIL_PASS || "laxx wion xwlu kaaj";
+
+    if (emailUser && emailPass) {
         return nodemailer.createTransport({
             service: 'gmail',
             auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
+                user: emailUser,
+                pass: emailPass
             },
             connectionTimeout: 8000,
             greetingTimeout: 8000,
@@ -107,7 +110,7 @@ const forgotPassword = async ({ email }) => {
         const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, '');
         const resetLink = `${frontendUrl}/auth/forgot-password/${token}?email=${encodeURIComponent(user.email)}`;
 
-        const senderEmail = process.env.EMAIL_USER || process.env.EMAIL_FROM || "support@skillforge.com";
+        const senderEmail = process.env.EMAIL_USER || "skillforge.noreply@gmail.com";
         const mailOptions = {
             from: `"SkillForge Support" <${senderEmail}>`,
             to: user.email,
