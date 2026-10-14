@@ -351,8 +351,11 @@ const resetPassword = async ({ email, token, password }) => {
         throw new Error("Security reset token is required.");
     }
 
-    if (!password || password.length < 6) {
-        throw new Error("Password must be at least 6 characters long.");
+    if (!password || password.length < 8) {
+        throw new Error("Password must be at least 8 characters long.");
+    }
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+        throw new Error("Password must contain at least one letter and one number.");
     }
 
     const user = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } });
