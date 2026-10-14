@@ -11,18 +11,24 @@ const getTransporter = () => {
             auth: {
                 user: process.env.EMAIL_USER,
                 pass: process.env.EMAIL_PASS
-            }
+            },
+            connectionTimeout: 8000,
+            greetingTimeout: 8000,
+            socketTimeout: 10000
         });
     }
 
-    if (process.env.SENDGRID_KEY) {
+    if (process.env.SENDGRID_KEY && process.env.SENDGRID_KEY.startsWith("SG.")) {
         return nodemailer.createTransport({
             host: "smtp.sendgrid.net",
             port: 587,
             auth: {
                 user: "apikey",
                 pass: process.env.SENDGRID_KEY
-            }
+            },
+            connectionTimeout: 8000,
+            greetingTimeout: 8000,
+            socketTimeout: 10000
         });
     }
 
@@ -83,12 +89,18 @@ const forgotPassword = async ({ email }) => {
             throw new Error("This email is not registered with SkillForge.");
         }
 
-        // Generate cryptographically secure random token
+        // Generate cryptographically secure random token (64 hex characters)
         const token = crypto.randomBytes(32).toString("hex");
-        const hashedToken = await bcrypt.hash(token, 12);
+        const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+        const expiry = Date.now() + 15 * 60 * 1000; // 15 minutes expiry
 
+        // Initialize resetTokens array if needed, keep only non-expired tokens
+        user.resetTokens = (user.resetTokens || []).filter(t => t.expiry && new Date(t.expiry) > new Date());
+        user.resetTokens.push({ tokenHash: hashedToken, expiry: new Date(expiry) });
+
+        // Maintain legacy fields for compatibility
         user.resetToken = hashedToken;
-        user.resetTokenExpiry = Date.now() + 15 * 60 * 1000; // 15 minutes expiry
+        user.resetTokenExpiry = expiry;
         await user.save();
 
         const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, '');
@@ -155,20 +167,34 @@ const forgotPasswordTokenCheck = async ({ token, email }) => {
         throw new Error("User not found!");
     }
 
-    if (!user.resetToken || !user.resetTokenExpiry) {
-        throw new Error("No password reset requested or link has already been used.");
+    const shaHash = crypto.createHash("sha256").update(token).digest("hex");
+    const now = Date.now();
+
+    // 1. Check in multi-token resetTokens array
+    const validInArray = (user.resetTokens || []).some(
+        t => t.tokenHash === shaHash && new Date(t.expiry) > new Date(now)
+    );
+
+    if (validInArray) {
+        return { success: true, message: "Token valid, proceed to reset password" };
     }
 
-    if (user.resetTokenExpiry < Date.now()) {
-        throw new Error("Password reset link has expired. Please request a new one.");
+    // 2. Check legacy resetToken field (SHA-256 or bcrypt)
+    if (user.resetToken && user.resetTokenExpiry && new Date(user.resetTokenExpiry) > new Date(now)) {
+        if (user.resetToken === shaHash) {
+            return { success: true, message: "Token valid, proceed to reset password" };
+        }
+        try {
+            const isBcryptMatch = await bcrypt.compare(token, user.resetToken);
+            if (isBcryptMatch) {
+                return { success: true, message: "Token valid, proceed to reset password" };
+            }
+        } catch (e) {
+            // Not a bcrypt hash
+        }
     }
 
-    const isValid = await bcrypt.compare(token, user.resetToken);
-    if (!isValid) {
-        throw new Error("Invalid reset link or token.");
-    }
-
-    return { success: true, message: "Token valid, proceed to reset password" };
+    throw new Error("Password reset link is invalid or has expired. Please request a new one.");
 };
 
 const resetPassword = async ({ email, token, password }) => {
@@ -185,25 +211,39 @@ const resetPassword = async ({ email, token, password }) => {
         throw new Error("User not found.");
     }
 
-    if (!user.resetToken || !user.resetTokenExpiry) {
-        throw new Error("No password reset requested or link has already been used.");
+    const shaHash = crypto.createHash("sha256").update(token).digest("hex");
+    const now = Date.now();
+
+    // Verify token exists and is still valid
+    let isValid = false;
+    if (user.resetTokens && user.resetTokens.length > 0) {
+        isValid = user.resetTokens.some(
+            t => t.tokenHash === shaHash && new Date(t.expiry) > new Date(now)
+        );
     }
 
-    if (user.resetTokenExpiry < Date.now()) {
-        throw new Error("Password reset link has expired. Please request a new one.");
+    if (!isValid && user.resetToken && user.resetTokenExpiry && new Date(user.resetTokenExpiry) > new Date(now)) {
+        if (user.resetToken === shaHash) {
+            isValid = true;
+        } else {
+            try {
+                isValid = await bcrypt.compare(token, user.resetToken);
+            } catch (e) {
+                isValid = false;
+            }
+        }
     }
 
-    // Cryptographically verify token before allowing password modification
-    const isValid = await bcrypt.compare(token, user.resetToken);
     if (!isValid) {
-        throw new Error("Invalid security token.");
+        throw new Error("Invalid or expired security token.");
     }
 
-    // Hash new password and revoke token
+    // Hash new password and revoke ALL reset tokens
     const hashedPassword = await bcrypt.hash(password, 12);
     user.password = hashedPassword;
     user.resetToken = null;
     user.resetTokenExpiry = null;
+    user.resetTokens = [];
 
     await user.save();
     return { success: true, message: "Password updated successfully!" };
