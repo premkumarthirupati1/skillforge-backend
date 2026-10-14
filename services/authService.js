@@ -91,6 +91,10 @@ const sendViaBrevo = async ({ to, subject, html }) => {
                     name: "SkillForge Support",
                     email: process.env.EMAIL_USER || "skillforge.noreply@gmail.com"
                 },
+                replyTo: {
+                    name: "SkillForge Support",
+                    email: process.env.EMAIL_USER || "skillforge.noreply@gmail.com"
+                },
                 to: [{ email: to }],
                 subject,
                 htmlContent: html
