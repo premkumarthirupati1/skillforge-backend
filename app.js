@@ -59,14 +59,13 @@ app.use(express.json());
 const nodemailer = require('nodemailer');
 
 app.get('/health', (req, res) => {
-    const hasSmtpConfigured = !!(process.env.EMAIL_USER || true);
     res.json({
         status: "ok",
-        version: "1.0.6-ipv4-enforced",
+        version: "1.0.7-resend-integrated",
         frontendUrl: process.env.FRONTEND_URL || "https://skillforge-frontend-aijn.vercel.app",
+        hasResend: !!process.env.RESEND_API_KEY,
         hasEmailUser: !!process.env.EMAIL_USER,
-        hasEmailPass: !!process.env.EMAIL_PASS,
-        smtpActive: hasSmtpConfigured
+        hasEmailPass: !!process.env.EMAIL_PASS
     });
 });
 
