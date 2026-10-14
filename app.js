@@ -61,11 +61,10 @@ const nodemailer = require('nodemailer');
 app.get('/health', (req, res) => {
     res.json({
         status: "ok",
-        version: "1.0.7-resend-integrated",
+        version: "1.0.8-brevo-live",
         frontendUrl: process.env.FRONTEND_URL || "https://skillforge-frontend-aijn.vercel.app",
-        hasResend: !!process.env.RESEND_API_KEY,
-        hasEmailUser: !!process.env.EMAIL_USER,
-        hasEmailPass: !!process.env.EMAIL_PASS
+        hasBrevo: !!process.env.BREVO_API_KEY,
+        hasResend: !!process.env.RESEND_API_KEY
     });
 });
 

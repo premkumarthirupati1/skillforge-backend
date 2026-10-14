@@ -74,6 +74,43 @@ const sendViaResend = async ({ to, subject, html }) => {
     }
 };
 
+const sendViaBrevo = async ({ to, subject, html }) => {
+    const brevoKey = process.env.BREVO_API_KEY;
+    if (!brevoKey) return false;
+
+    try {
+        const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+            method: "POST",
+            headers: {
+                "api-key": brevoKey,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({
+                sender: {
+                    name: "SkillForge Support",
+                    email: process.env.EMAIL_USER || "skillforge.noreply@gmail.com"
+                },
+                to: [{ email: to }],
+                subject,
+                htmlContent: html
+            })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            console.log(`✅ Email delivered via Brevo HTTPS API to ${to} (MessageID: ${data.messageId})`);
+            return true;
+        } else {
+            console.warn("⚠️ Brevo notice:", data.message || data);
+            return false;
+        }
+    } catch (e) {
+        console.warn("⚠️ Brevo network error:", e.message);
+        return false;
+    }
+};
+
 const registerUser = async ({ name, role, email, password }) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -179,33 +216,41 @@ const forgotPassword = async ({ email }) => {
 
         // Asynchronously dispatch email without blocking client response
         (async () => {
-            // Attempt 1: Resend HTTPS API (fastest, never blocked by cloud firewalls)
-            const sentViaResend = await sendViaResend({
+            // Attempt 1: Brevo HTTPS API (Can deliver to ANY recipient in the world, port 443)
+            let sent = await sendViaBrevo({
                 to: user.email,
                 subject: "SkillForge - Password Reset Request",
                 html: mailOptions.html
             });
 
-            if (!sentViaResend) {
-                // Attempt 2: SMTP Fallback via Nodemailer
+            // Attempt 2: Resend HTTPS API
+            if (!sent) {
+                sent = await sendViaResend({
+                    to: user.email,
+                    subject: "SkillForge - Password Reset Request",
+                    html: mailOptions.html
+                });
+            }
+
+            // Attempt 3: SMTP Fallback via Nodemailer
+            if (!sent) {
                 const transporter = getTransporter();
                 if (transporter) {
                     try {
                         await transporter.sendMail(mailOptions);
                         console.log(`✅ Password reset email delivered via SMTP to ${user.email}`);
+                        sent = true;
                     } catch (mailError) {
                         console.warn("⚠️ SMTP delivery note:", mailError.message);
-                        console.log("\n=======================================================");
-                        console.log("🔗 [DEV/FALLBACK] PASSWORD RESET LINK FOR " + user.email + ":");
-                        console.log(resetLink);
-                        console.log("=======================================================\n");
                     }
-                } else {
-                    console.log("\n=======================================================");
-                    console.log("🔗 [DEV] NO TRANSPORTER CONFIGURED. RESET LINK FOR " + user.email + ":");
-                    console.log(resetLink);
-                    console.log("=======================================================\n");
                 }
+            }
+
+            if (!sent) {
+                console.log("\n=======================================================");
+                console.log("🔗 [DEV/FALLBACK] PASSWORD RESET LINK FOR " + user.email + ":");
+                console.log(resetLink);
+                console.log("=======================================================\n");
             }
         })().catch(err => console.error("Email dispatch error:", err));
 
