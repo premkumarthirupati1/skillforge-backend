@@ -55,6 +55,18 @@ app.use(cors({
 
 app.use(globalLimiter);
 app.use(express.json());
+
+app.get('/health', (req, res) => {
+    res.json({
+        status: "ok",
+        version: "1.0.3-fast-async-email",
+        frontendUrl: process.env.FRONTEND_URL || "not_set",
+        hasEmailUser: !!process.env.EMAIL_USER,
+        hasEmailPass: !!process.env.EMAIL_PASS,
+        hasSendGrid: !!process.env.SENDGRID_KEY
+    });
+});
+
 app.use('/user', profileRoutes);
 app.use('/auth', authRoutes);
 app.use('/course', courseRoutes);

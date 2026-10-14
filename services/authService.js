@@ -84,7 +84,8 @@ const loginUser = async ({ email, password }) => {
 }
 const forgotPassword = async ({ email }) => {
     try {
-        const user = await User.findOne({ email });
+        // Case-insensitive user lookup
+        const user = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } });
         if (!user) {
             throw new Error("This email is not registered with SkillForge.");
         }
@@ -104,12 +105,12 @@ const forgotPassword = async ({ email }) => {
         await user.save();
 
         const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, '');
-        const resetLink = `${frontendUrl}/auth/forgot-password/${token}?email=${encodeURIComponent(email)}`;
+        const resetLink = `${frontendUrl}/auth/forgot-password/${token}?email=${encodeURIComponent(user.email)}`;
 
         const senderEmail = process.env.EMAIL_USER || process.env.EMAIL_FROM || "support@skillforge.com";
         const mailOptions = {
             from: `"SkillForge Support" <${senderEmail}>`,
-            to: email,
+            to: user.email,
             subject: "SkillForge - Password Reset Request",
             html: `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px;">
@@ -138,19 +139,21 @@ const forgotPassword = async ({ email }) => {
 
         const transporter = getTransporter();
         if (transporter) {
-            try {
-                await transporter.sendMail(mailOptions);
-                console.log(`✅ Password reset email successfully delivered to ${email}`);
-            } catch (mailError) {
-                console.warn("⚠️ Email delivery note:", mailError.message);
-                console.log("\n=======================================================");
-                console.log("🔗 [DEV] PASSWORD RESET LINK FOR " + email + ":");
-                console.log(resetLink);
-                console.log("=======================================================\n");
-            }
+            // Asynchronously dispatch email without blocking HTTP response
+            transporter.sendMail(mailOptions)
+                .then(() => {
+                    console.log(`✅ Password reset email successfully delivered to ${user.email}`);
+                })
+                .catch((mailError) => {
+                    console.warn("⚠️ Email delivery note:", mailError.message);
+                    console.log("\n=======================================================");
+                    console.log("🔗 [DEV] PASSWORD RESET LINK FOR " + user.email + ":");
+                    console.log(resetLink);
+                    console.log("=======================================================\n");
+                });
         } else {
             console.log("\n=======================================================");
-            console.log("🔗 [DEV] PASSWORD RESET LINK FOR " + email + ":");
+            console.log("🔗 [DEV] NO TRANSPORTER CONFIGURED. RESET LINK FOR " + user.email + ":");
             console.log(resetLink);
             console.log("=======================================================\n");
         }
@@ -162,7 +165,7 @@ const forgotPassword = async ({ email }) => {
 };
 
 const forgotPasswordTokenCheck = async ({ token, email }) => {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } });
     if (!user) {
         throw new Error("User not found!");
     }
@@ -206,7 +209,7 @@ const resetPassword = async ({ email, token, password }) => {
         throw new Error("Password must be at least 6 characters long.");
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: { $regex: new RegExp(`^${email.trim()}$`, 'i') } });
     if (!user) {
         throw new Error("User not found.");
     }
