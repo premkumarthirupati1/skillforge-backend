@@ -62,7 +62,7 @@ app.get('/health', (req, res) => {
     const hasSmtpConfigured = !!(process.env.EMAIL_USER || true);
     res.json({
         status: "ok",
-        version: "1.0.5-with-email-tester",
+        version: "1.0.6-ipv4-enforced",
         frontendUrl: process.env.FRONTEND_URL || "https://skillforge-frontend-aijn.vercel.app",
         hasEmailUser: !!process.env.EMAIL_USER,
         hasEmailPass: !!process.env.EMAIL_PASS,
@@ -76,8 +76,11 @@ app.get('/test-email', async (req, res) => {
     const emailPass = process.env.EMAIL_PASS || "laxx wion xwlu kaaj";
 
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
         auth: { user: emailUser, pass: emailPass },
+        family: 4,
         connectionTimeout: 10000,
         greetingTimeout: 10000,
         socketTimeout: 10000

@@ -10,13 +10,16 @@ const getTransporter = () => {
 
     if (emailUser && emailPass) {
         return nodemailer.createTransport({
-            service: 'gmail',
+            host: "smtp.gmail.com",
+            port: 465,
+            secure: true,
             auth: {
                 user: emailUser,
                 pass: emailPass
             },
-            connectionTimeout: 8000,
-            greetingTimeout: 8000,
+            family: 4, // Force IPv4 to eliminate Render IPv6 ENETUNREACH errors
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
             socketTimeout: 10000
         });
     }
