@@ -116,26 +116,56 @@ const sendViaBrevo = async ({ to, subject, html }) => {
 };
 
 const registerUser = async ({ name, role, email, password }) => {
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-        throw new Error("User already exists");
+    // 1. Name validation
+    const trimmedName = (name || "").trim();
+    if (!trimmedName || trimmedName.length < 2) {
+        throw new Error("Full name must be at least 2 characters long.");
     }
+    if (trimmedName.length > 60) {
+        throw new Error("Full name cannot exceed 60 characters.");
+    }
+
+    // 2. Email normalization & format check
+    const normalizedEmail = (email || "").toLowerCase().trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!normalizedEmail || !emailRegex.test(normalizedEmail)) {
+        throw new Error("Please enter a valid email address.");
+    }
+
+    // 3. Password criteria validation
+    if (!password || password.length < 8) {
+        throw new Error("Password must be at least 8 characters long.");
+    }
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+        throw new Error("Password must contain at least one letter and one number.");
+    }
+
+    // 4. Role validation
+    const validRoles = ["student", "instructor"];
+    const userRole = validRoles.includes(role) ? role : "student";
+
+    // 5. Check if user already exists
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+        throw new Error("An account with this email address already exists.");
+    }
+
     const hashed = await bcrypt.hash(password, 12);
-
     const user = await User.create({
-        name,
-        role,
-        email,
+        name: trimmedName,
+        role: userRole,
+        email: normalizedEmail,
         password: hashed,
-    })
+    });
 
-    const accessToken = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '15m' });
+    const accessToken = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET, { expiresIn: '15m' });
     const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET + "_REFRESH", { expiresIn: '7d' });
     return {
         accessToken,
         refreshToken,
         user: {
             id: user._id,
+            name: user.name,
             email: user.email,
             role: user.role
         }
@@ -143,16 +173,23 @@ const registerUser = async ({ name, role, email, password }) => {
 };
 
 const loginUser = async ({ email, password }) => {
-    const user = await User.findOne({ email }).select("+password");
-    if (!user) {
-        throw new Error("Could not find this email.");
+    const normalizedEmail = (email || "").toLowerCase().trim();
+    if (!normalizedEmail || !password) {
+        throw new Error("Please enter both your email address and password.");
     }
+
+    const user = await User.findOne({ email: normalizedEmail }).select("+password");
+    if (!user) {
+        throw new Error("No account found with this email address.");
+    }
+
     const isEqual = await bcrypt.compare(password, user.password);
     if (!isEqual) {
-        throw new Error("Invalid Credentials.");
+        throw new Error("Incorrect password. Please try again or click Forgot Password.");
     }
+
     const accessToken = jwt.sign(
-        { id: user._id, role: user.role },
+        { id: user._id, role: user.role, name: user.name },
         process.env.JWT_SECRET,
         { expiresIn: '15m' }
     );
@@ -161,8 +198,17 @@ const loginUser = async ({ email, password }) => {
         process.env.JWT_SECRET + "_REFRESH",
         { expiresIn: '7d' }
     );
-    return { accessToken, refreshToken, user: { id: user._id, email: user.email, role: user.role } };
-}
+    return {
+        accessToken,
+        refreshToken,
+        user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role
+        }
+    };
+};
 const forgotPassword = async ({ email }) => {
     try {
         // Case-insensitive user lookup
