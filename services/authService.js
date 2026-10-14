@@ -180,12 +180,12 @@ const loginUser = async ({ email, password }) => {
 
     const user = await User.findOne({ email: normalizedEmail }).select("+password");
     if (!user) {
-        throw new Error("No account found with this email address.");
+        throw new Error("Incorrect credentials. Please check your email and password.");
     }
 
     const isEqual = await bcrypt.compare(password, user.password);
     if (!isEqual) {
-        throw new Error("Incorrect password. Please try again or click Forgot Password.");
+        throw new Error("Incorrect credentials. Please check your email and password.");
     }
 
     const accessToken = jwt.sign(
