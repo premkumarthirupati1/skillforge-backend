@@ -13,6 +13,12 @@ router.get(
   profileController.getProfile
 );
 
+// Public profile view accessible to anyone
+router.get(
+  '/profile/:userId',
+  profileController.getPublicProfile
+);
+
 router.put(
   '/profile',
   protect,
