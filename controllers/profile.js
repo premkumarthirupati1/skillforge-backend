@@ -188,3 +188,48 @@ exports.updateProfile = async (req, res, next) => {
         next(err);
     }
 };
+
+exports.checkUsernameAvailability = async (req, res, next) => {
+    try {
+        const username = req.query.username?.trim().toLowerCase();
+        const currentUserId = req.user?.id;
+
+        if (!username) {
+            return res.status(200).json({ available: false, message: "Username cannot be empty" });
+        }
+
+        const usernameRegex = /^[a-z0-9_-]{3,30}$/;
+        if (!usernameRegex.test(username)) {
+            return res.status(200).json({ 
+                available: false, 
+                message: "Username must be 3-30 letters, numbers, hyphens, or underscores" 
+            });
+        }
+
+        const reserved = ['admin', 'api', 'dashboard', 'settings', 'profile', 'courses', 'projects', 'login', 'signup', 'auth', 'help', 'tracks', 'u'];
+        if (reserved.includes(username)) {
+            return res.status(200).json({ available: false, message: "This username is reserved" });
+        }
+
+        const profileQuery = { username };
+        const userQuery = { username };
+        if (currentUserId) {
+            profileQuery.userId = { $ne: currentUserId };
+            userQuery._id = { $ne: currentUserId };
+        }
+
+        const existingProfile = await Profile.findOne(profileQuery);
+        if (existingProfile) {
+            return res.status(200).json({ available: false, message: "Username is already taken" });
+        }
+
+        const existingUser = await User.findOne(userQuery);
+        if (existingUser) {
+            return res.status(200).json({ available: false, message: "Username is already taken" });
+        }
+
+        return res.status(200).json({ available: true, message: "Username is available" });
+    } catch (err) {
+        next(err);
+    }
+};

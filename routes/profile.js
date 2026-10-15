@@ -13,6 +13,13 @@ router.get(
   profileController.getProfile
 );
 
+// Real-time username availability check
+router.get(
+  '/check-username',
+  protect,
+  profileController.checkUsernameAvailability
+);
+
 // Public profile view accessible to anyone by username or userId
 router.get(
   '/profile/:identifier',
