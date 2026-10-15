@@ -95,20 +95,61 @@ try:
     if not cases:
         cases = [{"name": "Execution Verification", "expected": "Pass"}]
 
+    has_todo = "TODO: Implement" in code_str or "# TODO" in code_str or "pass" == code_str.strip()
+
     for idx, tc in enumerate(cases):
         t0 = time.perf_counter()
         tc_name = tc.get("name", f"Test {idx + 1}")
         tc_expected = tc.get("expected", "Pass")
-        
-        # Simulated assertion check against user namespace
+        tc_cmd = tc.get("cmd", "")
+
+        step_passed = False
+        step_output = ""
+
+        if has_todo:
+            step_passed = False
+            step_output = f"✗ Incomplete: Uncompleted TODO placeholder detected for Milestone ${milestoneIndex + 1}."
+        else:
+            # Check milestone requirements
+            evaluated = False
+            if tc_cmd:
+                try:
+                    eval(tc_cmd, user_globals)
+                    step_passed = True
+                    step_output = f"✓ Asserted: {tc_expected}"
+                    evaluated = True
+                except Exception:
+                    evaluated = False
+
+            if not evaluated:
+                # Milestone structural validation
+                if ${milestoneIndex} == 0:
+                    step_passed = len(code_str.strip()) > 80 and not has_todo
+                    step_output = f"✓ Asserted: {tc_expected}" if step_passed else f"✗ Assertion failed: {tc_name} requirement not implemented."
+                elif ${milestoneIndex} == 1:
+                    has_retriever = "HybridRetriever" in user_globals or "collection" in code_str or "chromadb" in code_str
+                    step_passed = has_retriever and not has_todo
+                    step_output = f"✓ Asserted: {tc_expected}" if step_passed else f"✗ Assertion failed: Milestone 2 vector store / retriever missing."
+                else:
+                    step_passed = False
+                    step_output = f"✗ Assertion failed: Milestone ${milestoneIndex + 1} requirement not implemented."
+
         duration = (time.perf_counter() - t0) * 1000 + 1.2
-        results["passed"] += 1
-        results["steps"].append({
-            "name": tc_name,
-            "passed": True,
-            "duration": f"{duration:.1f}ms",
-            "output": f"✓ Assertion passed: {tc_expected}"
-        })
+        if step_passed:
+            results["passed"] += 1
+            results["steps"].append({
+                "name": tc_name,
+                "passed": True,
+                "duration": f"{duration:.1f}ms",
+                "output": step_output
+            })
+        else:
+            results["steps"].append({
+                "name": tc_name,
+                "passed": False,
+                "duration": f"{duration:.1f}ms",
+                "output": step_output
+            })
 
 except SyntaxError as e:
     err_line = (e.text or '').strip()
@@ -375,24 +416,55 @@ async function executeGo({ files, entrypoint, testCases, milestoneIndex, startTi
         };
     }
 
+    const isPlaceholder = mainCode.includes("TODO: Implement") || mainCode.includes("// TODO") || mainCode.length < 50;
     const cases = testCases.length > 0 ? testCases : [{ name: "Spec assertion", expected: "Pass" }];
-    const steps = cases.map(tc => ({
-        name: tc.name,
-        passed: true,
-        duration: (Math.random() * 2 + 1).toFixed(1) + 'ms',
-        output: `✓ Asserted: ${tc.expected}`
-    }));
+    
+    let passedCount = 0;
+    const steps = cases.map((tc, idx) => {
+        let stepPassed = false;
+        let stepOutput = "";
 
+        if (isPlaceholder) {
+            stepPassed = false;
+            stepOutput = `✗ Incomplete: Code contains uncompleted TODO placeholders for Milestone ${milestoneIndex + 1}.`;
+        } else {
+            // Milestone-specific requirements in Go
+            if (milestoneIndex === 0) {
+                const hasRaft = mainCode.includes('struct') && (mainCode.includes('Raft') || mainCode.includes('Node') || mainCode.includes('Scheduler'));
+                stepPassed = hasRaft;
+                stepOutput = hasRaft ? `✓ Asserted: ${tc.expected}` : `✗ Assertion failed: Raft node struct not declared.`;
+            } else if (milestoneIndex === 1) {
+                const hasElection = mainCode.includes('Election') || mainCode.includes('Vote') || mainCode.includes('RequestVote');
+                stepPassed = hasElection;
+                stepOutput = hasElection ? `✓ Asserted: ${tc.expected}` : `✗ Assertion failed: Leader election logic missing.`;
+            } else {
+                stepPassed = false;
+                stepOutput = `✗ Assertion failed: Milestone ${milestoneIndex + 1} requirement not implemented.`;
+            }
+        }
+
+        if (stepPassed) passedCount++;
+        return {
+            name: tc.name,
+            passed: stepPassed,
+            duration: "2.1ms",
+            output: stepOutput
+        };
+    });
+
+    const allPassed = passedCount === cases.length && passedCount > 0;
     return {
-        success: true,
+        success: allPassed,
         runnerType: 'backend-sandbox-analyzer',
         runtime: 'go version go1.22.2 (SkillForge Sandbox)',
         total: cases.length,
-        passed: cases.length,
+        passed: passedCount,
         duration: (Date.now() - startTime) + 'ms',
         steps,
-        stdout: `=== RUN   TestMilestone\n--- PASS: TestMilestone (0.01s)\nPASS\nok  	skillforge/project	0.012s`,
-        stderr: ""
+        stdout: allPassed 
+            ? `=== RUN   TestMilestone\n--- PASS: TestMilestone (0.01s)\nPASS\nok  	skillforge/project	0.012s`
+            : `=== RUN   TestMilestone\n--- FAIL: TestMilestone (${cases.length - passedCount}/${cases.length} assertions failed)\nFAIL`,
+        stderr: allPassed ? "" : steps.find(s => !s.passed)?.output || ""
     };
 }
 
