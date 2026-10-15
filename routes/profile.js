@@ -13,9 +13,9 @@ router.get(
   profileController.getProfile
 );
 
-// Public profile view accessible to anyone
+// Public profile view accessible to anyone by username or userId
 router.get(
-  '/profile/:userId',
+  '/profile/:identifier',
   profileController.getPublicProfile
 );
 

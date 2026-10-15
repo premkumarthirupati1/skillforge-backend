@@ -12,6 +12,13 @@ const ProfileSchema = new mongoose.Schema({
         required: true,
         trim: true,
     },
+    username: {
+        type: String,
+        trim: true,
+        lowercase: true,
+        sparse: true,
+        unique: true
+    },
     bio: {
         type: String,
         maxLength: 500
