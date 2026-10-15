@@ -21,9 +21,40 @@ async function getAiMentorAdvice({
     userQuery = "",
     hintLevel = 1
 }) {
-    const apiKey = process.env.GEMINI_API_KEY;
+    // 1. Try OpenRouter API (Qwen 2.5 Coder 32B / Open-Source LLMs)
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+    if (openRouterKey) {
+        try {
+            const openRouterModel = process.env.OPENROUTER_MODEL || "qwen/qwen-2.5-coder-32b-instruct";
+            const llmResult = await callOpenRouterMentor({
+                apiKey: openRouterKey,
+                model: openRouterModel,
+                projectId,
+                projectTitle,
+                language,
+                milestoneIndex,
+                milestoneTitle,
+                milestoneObjective,
+                activeFileName,
+                userCode,
+                testResults,
+                userQuery,
+                hintLevel
+            });
+            if (llmResult && llmResult.diagnosis) {
+                return {
+                    ...llmResult,
+                    modelUsed: `Qwen 2.5 Coder 32B (OpenRouter)`,
+                    isLiveAI: true
+                };
+            }
+        } catch (llmErr) {
+            console.warn("OpenRouter API call failed, attempting fallback:", llmErr.message);
+        }
+    }
 
-    // If Gemini API Key is present, try live LLM
+    // 2. Try Gemini API if configured
+    const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
         try {
             const llmResult = await callGeminiMentor({
@@ -52,7 +83,7 @@ async function getAiMentorAdvice({
         }
     }
 
-    // Expert Pedagogical Engine (Deep Domain Diagnostic for all 8 tracks)
+    // 3. Expert Pedagogical Engine (Deep Domain Diagnostic for all 8 tracks)
     const heuristicResult = analyzeWithExpertHeuristics({
         projectId,
         projectTitle,
@@ -72,6 +103,106 @@ async function getAiMentorAdvice({
         modelUsed: "Forge Heuristic Diagnostic Engine",
         isLiveAI: false
     };
+}
+
+/**
+ * Call OpenRouter API (Qwen 2.5 Coder 32B / Open-Source LLMs)
+ */
+async function callOpenRouterMentor({
+    apiKey,
+    model = "qwen/qwen-2.5-coder-32b-instruct",
+    projectTitle,
+    language,
+    milestoneIndex,
+    milestoneTitle,
+    milestoneObjective,
+    activeFileName,
+    userCode,
+    testResults,
+    userQuery,
+    hintLevel
+}) {
+    const endpoint = "https://openrouter.ai/api/v1/chat/completions";
+
+    const failedStep = testResults?.steps?.find(s => !s.passed) || (testResults?.error ? { name: "Runtime Error", output: testResults.error } : null);
+
+    const systemPrompt = `You are "Forge Copilot", an elite Staff Engineer and coding mentor for SkillForge (a hands-on developer platform).
+You guide developers building production-grade software (Redis in Rust, Raft in Go, Local RAG in Python, API Gateways, Git Internals).
+
+PEDAGOGICAL RULES:
+1. NEVER output the full solution code. Guide the learner to discover and fix the bug themselves.
+2. Match the requested Hint Level strictly:
+   - Level 1 (Conceptual Nudge): Explain the architectural concept or invariant that was violated. Ask a reflective question.
+   - Level 2 (Pinpoint Bug): Point directly to the function, struct, or file location causing the issue and explain why it behaves unexpectedly.
+   - Level 3 (Structural Pattern): Provide a small, idiomatic code pattern or skeleton showing how to approach the fix, without writing the whole file.
+3. Be concise, technical, and empathetic. Output ONLY a valid JSON object with the following structure:
+{
+  "diagnosis": "Short 1-2 sentence explanation of what went wrong or direct answer to the query",
+  "hint": "The graduated hint tailored to Level ${hintLevel}",
+  "targetLine": <number or null if line can be identified in user code>,
+  "codePattern": "Small 2-5 line code snippet illustrating the concept (or empty string)",
+  "quickPrompts": ["3 short relevant follow-up questions user might ask"]
+}`;
+
+    const promptText = `
+Project: ${projectTitle} (${language})
+Milestone ${milestoneIndex + 1}: ${milestoneTitle}
+Objective: ${milestoneObjective}
+
+Active File: ${activeFileName}
+User Code:
+\`\`\`${language}
+${userCode ? userCode.slice(0, 3500) : "// Starter code"}
+\`\`\`
+
+Test Results:
+${failedStep ? `Failing Assertion: ${failedStep.name}\nDiagnostic Output: ${failedStep.output}` : "All tests currently passing or not yet executed."}
+
+User Question: ${userQuery || "Please analyze why my tests failed and provide guidance."}
+Requested Hint Level: Level ${hintLevel} (1=Nudge, 2=Pinpoint, 3=Code Structure)
+
+Output strictly valid JSON with keys: "diagnosis", "hint", "targetLine", "codePattern", "quickPrompts".`;
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://skillforge.dev",
+            "X-Title": "SkillForge AI Mentor"
+        },
+        body: JSON.stringify({
+            model: model,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: promptText }
+            ],
+            temperature: 0.3,
+            max_tokens: 800,
+            response_format: { type: "json_object" }
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`OpenRouter API returned status ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    const rawContent = data?.choices?.[0]?.message?.content;
+    if (!rawContent) return null;
+
+    try {
+        const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+        return JSON.parse(cleaned);
+    } catch (e) {
+        return {
+            diagnosis: rawContent.slice(0, 200),
+            hint: rawContent,
+            targetLine: null,
+            codePattern: "",
+            quickPrompts: ["Explain milestone objective", "How do I fix this error?"]
+        };
+    }
 }
 
 /**
