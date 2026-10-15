@@ -403,11 +403,251 @@ async function executeNode({ files, entrypoint, testCases, milestoneIndex, start
 }
 
 /**
+ * Strip comments from code while preserving string literals and line numbers.
+ * Replaces // and /* ... *\/ with spaces/newlines.
+ */
+function stripComments(code) {
+    let result = '';
+    let i = 0;
+    const len = code.length;
+
+    let inLineComment = false;
+    let inBlockComment = 0; // support nested block comments
+    let inString = false;
+    let inChar = false;
+
+    while (i < len) {
+        const char = code[i];
+        const next = i + 1 < len ? code[i + 1] : '';
+
+        // If inside a line comment //
+        if (inLineComment) {
+            if (char === '\n') {
+                inLineComment = false;
+                result += '\n'; // preserve line numbers
+            } else {
+                result += ' ';
+            }
+            i++;
+            continue;
+        }
+
+        // If inside a block comment /* */
+        if (inBlockComment > 0) {
+            if (char === '/' && next === '*') {
+                inBlockComment++;
+                result += '  ';
+                i += 2;
+                continue;
+            } else if (char === '*' && next === '/') {
+                inBlockComment--;
+                result += '  ';
+                i += 2;
+                continue;
+            } else if (char === '\n') {
+                result += '\n';
+            } else {
+                result += ' ';
+            }
+            i++;
+            continue;
+        }
+
+        // If inside a string literal "..."
+        if (inString) {
+            result += char;
+            if (char === '\\') {
+                if (i + 1 < len) {
+                    result += code[i + 1];
+                    i += 2;
+                    continue;
+                }
+            } else if (char === '"') {
+                inString = false;
+            }
+            i++;
+            continue;
+        }
+
+        // If inside a char literal '...'
+        if (inChar) {
+            result += char;
+            if (char === '\\') {
+                if (i + 1 < len) {
+                    result += code[i + 1];
+                    i += 2;
+                    continue;
+                }
+            } else if (char === "'") {
+                inChar = false;
+            }
+            i++;
+            continue;
+        }
+
+        // Check for comment starts
+        if (char === '/' && next === '/') {
+            inLineComment = true;
+            result += '  ';
+            i += 2;
+            continue;
+        }
+
+        if (char === '/' && next === '*') {
+            inBlockComment = 1;
+            result += '  ';
+            i += 2;
+            continue;
+        }
+
+        if (char === '"') {
+            inString = true;
+            result += '"';
+            i++;
+            continue;
+        }
+
+        if (char === "'" && next !== "'" && i + 2 < len && code[i + 2] === "'") {
+            inChar = true;
+            result += "'";
+            i++;
+            continue;
+        }
+
+        result += char;
+        i++;
+    }
+
+    return result;
+}
+
+/**
+ * Strip both comments AND string contents so delimiters inside strings
+ * (e.g. println!("{}: {}", a, b)) or comments (// {) are not counted as syntax delimiters.
+ */
+function stripCommentsAndStrings(code) {
+    let result = '';
+    let i = 0;
+    const len = code.length;
+
+    let inLineComment = false;
+    let inBlockComment = 0;
+    let inString = false;
+    let inChar = false;
+
+    while (i < len) {
+        const char = code[i];
+        const next = i + 1 < len ? code[i + 1] : '';
+
+        if (inLineComment) {
+            if (char === '\n') {
+                inLineComment = false;
+                result += '\n';
+            } else {
+                result += ' ';
+            }
+            i++;
+            continue;
+        }
+
+        if (inBlockComment > 0) {
+            if (char === '/' && next === '*') {
+                inBlockComment++;
+                result += '  ';
+                i += 2;
+                continue;
+            } else if (char === '*' && next === '/') {
+                inBlockComment--;
+                result += '  ';
+                i += 2;
+                continue;
+            } else if (char === '\n') {
+                result += '\n';
+            } else {
+                result += ' ';
+            }
+            i++;
+            continue;
+        }
+
+        if (inString) {
+            if (char === '\\') {
+                result += '  ';
+                i += 2;
+                continue;
+            } else if (char === '"') {
+                inString = false;
+                result += ' ';
+                i++;
+                continue;
+            } else if (char === '\n') {
+                result += '\n';
+            } else {
+                result += ' ';
+            }
+            i++;
+            continue;
+        }
+
+        if (inChar) {
+            if (char === '\\') {
+                result += '  ';
+                i += 2;
+                continue;
+            } else if (char === "'") {
+                inChar = false;
+                result += ' ';
+                i++;
+                continue;
+            } else {
+                result += ' ';
+            }
+            i++;
+            continue;
+        }
+
+        if (char === '/' && next === '/') {
+            inLineComment = true;
+            result += '  ';
+            i += 2;
+            continue;
+        }
+
+        if (char === '/' && next === '*') {
+            inBlockComment = 1;
+            result += '  ';
+            i += 2;
+            continue;
+        }
+
+        if (char === '"') {
+            inString = true;
+            result += ' ';
+            i++;
+            continue;
+        }
+
+        if (char === "'" && next !== "'" && i + 2 < len && code[i + 2] === "'") {
+            inChar = true;
+            result += ' ';
+            i++;
+            continue;
+        }
+
+        result += char;
+        i++;
+    }
+
+    return result;
+}
+
+/**
  * Syntax checking helper for Rust
  */
 function checkRustSyntax(code) {
     const errors = [];
-    const lines = code.split('\n');
+    const cleanCode = stripCommentsAndStrings(code);
+    const lines = cleanCode.split('\n');
 
     let openBraces = 0;
     let openParens = 0;
@@ -415,10 +655,6 @@ function checkRustSyntax(code) {
 
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        const trimmed = line.trim();
-        
-        // Skip comments
-        if (trimmed.startsWith('//') || trimmed.startsWith('/*')) continue;
 
         for (let char of line) {
             if (char === '{') openBraces++;
@@ -433,13 +669,21 @@ function checkRustSyntax(code) {
             errors.push({ line: i + 1, message: "unexpected closing delimiter '}'" });
             break;
         }
+        if (openParens < 0) {
+            errors.push({ line: i + 1, message: "unexpected closing delimiter ')'" });
+            break;
+        }
+        if (openBrackets < 0) {
+            errors.push({ line: i + 1, message: "unexpected closing delimiter ']'" });
+            break;
+        }
     }
 
     if (openBraces > 0 && errors.length === 0) {
         errors.push({ line: lines.length, message: "this file contains an unclosed delimiter '{'" });
-    } else if (openParens !== 0 && errors.length === 0) {
+    } else if (openParens > 0 && errors.length === 0) {
         errors.push({ line: lines.length, message: "unmatched parenthesis '()'" });
-    } else if (openBrackets !== 0 && errors.length === 0) {
+    } else if (openBrackets > 0 && errors.length === 0) {
         errors.push({ line: lines.length, message: "unmatched square bracket '[]'" });
     }
 
@@ -468,20 +712,22 @@ For more information about this error, try \`rustc --explain E0001\`.`;
  * Evaluate architectural milestone compliance in Rust
  */
 function evaluateRustMilestoneAssertion(code, milestoneIndex, testIdx, tc) {
-    const upper = code.toUpperCase();
+    // Only inspect active, uncommented code so commented-out code is not falsely evaluated
+    const activeCode = stripComments(code);
+    const upper = activeCode.toUpperCase();
 
     if (milestoneIndex === 0) {
         // Milestone 1: TCP Bind & PING response
         if (testIdx === 0) {
-            const hasBind = code.includes('TcpListener::bind') || code.includes('127.0.0.1:6379') || code.includes('6379');
+            const hasBind = activeCode.includes('TcpListener::bind') || activeCode.includes('127.0.0.1:6379') || activeCode.includes('6379');
             return { passed: hasBind, reason: "TcpListener::bind must be bound to 127.0.0.1:6379" };
         }
         if (testIdx === 1) {
-            const hasPing = upper.includes('PING') && (code.includes('+PONG\\r\\n') || code.includes('PONG'));
+            const hasPing = upper.includes('PING') && (activeCode.includes('+PONG\\r\\n') || activeCode.includes('PONG'));
             return { passed: hasPing, reason: "Server did not respond with +PONG\\r\\n on receiving PING command" };
         }
         if (testIdx === 2) {
-            const hasThreads = code.includes('thread::spawn') || code.includes('tokio::spawn') || code.includes('incoming');
+            const hasThreads = activeCode.includes('thread::spawn') || activeCode.includes('tokio::spawn') || activeCode.includes('incoming');
             return { passed: hasThreads, reason: "Concurrent client connection handling missing" };
         }
         return { passed: true };
@@ -490,7 +736,7 @@ function evaluateRustMilestoneAssertion(code, milestoneIndex, testIdx, tc) {
     if (milestoneIndex === 1) {
         // Milestone 2: RESP Array & Bulk String
         if (testIdx === 0) {
-            const hasResp = code.includes('parse_resp') || code.includes('RespType') || code.includes('Array');
+            const hasResp = activeCode.includes('parse_resp') || activeCode.includes('RespType') || activeCode.includes('Array');
             return { passed: hasResp, reason: "RESP array parsing not implemented" };
         }
         return { passed: true };
@@ -498,7 +744,7 @@ function evaluateRustMilestoneAssertion(code, milestoneIndex, testIdx, tc) {
 
     if (milestoneIndex === 2) {
         // Milestone 3: KV Store with TTL
-        const hasStore = code.includes('store') || code.includes('Instant') || code.includes('expires_at') || code.includes('SET');
+        const hasStore = activeCode.includes('store') || activeCode.includes('Instant') || activeCode.includes('expires_at') || activeCode.includes('SET');
         return { passed: hasStore, reason: "SET/GET key-value expiration store missing required TTL handling" };
     }
 
