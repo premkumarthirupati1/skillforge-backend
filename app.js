@@ -12,6 +12,7 @@ const profileRoutes = require('./routes/profile');
 const reviewRoutes = require('./routes/review');
 const paymentRoutes = require('./routes/payment');
 const runnerRoutes = require('./routes/runner');
+const projectRoutes = require('./routes/project');
 const errorHandler = require('./middlewares/errorHandler');
 const cookieParser = require('cookie-parser');
 const { globalLimiter } = require('./middlewares/rateLimiter');
@@ -110,6 +111,8 @@ app.use('/review', reviewRoutes);
 app.use('/payment', paymentRoutes);
 app.use('/api/runner', runnerRoutes);
 app.use('/runner', runnerRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/projects', projectRoutes);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
