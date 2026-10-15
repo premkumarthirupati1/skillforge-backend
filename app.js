@@ -11,6 +11,7 @@ const lessonRoutes = require('./routes/lesson');
 const profileRoutes = require('./routes/profile');
 const reviewRoutes = require('./routes/review');
 const paymentRoutes = require('./routes/payment');
+const runnerRoutes = require('./routes/runner');
 const errorHandler = require('./middlewares/errorHandler');
 const cookieParser = require('cookie-parser');
 const { globalLimiter } = require('./middlewares/rateLimiter');
@@ -107,6 +108,8 @@ app.use('/modules', moduleRoutes);
 app.use('/lessons', lessonRoutes);
 app.use('/review', reviewRoutes);
 app.use('/payment', paymentRoutes);
+app.use('/api/runner', runnerRoutes);
+app.use('/runner', runnerRoutes);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
