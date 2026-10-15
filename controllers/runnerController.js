@@ -1,4 +1,5 @@
 const { executeCodeSandbox } = require('../services/codeExecutionService');
+const { getAiMentorAdvice } = require('../services/aiMentorService');
 
 /**
  * Controller: Execute Code Sandbox
@@ -33,6 +34,54 @@ exports.executeCode = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: "Internal error during sandbox execution.",
+            error: err.message
+        });
+    }
+};
+
+/**
+ * Controller: AI Mentor / Forge Copilot
+ * POST /api/runner/ai-assist
+ */
+exports.getAiMentorAssistance = async (req, res) => {
+    try {
+        const {
+            projectId,
+            projectTitle,
+            language,
+            milestoneIndex,
+            milestoneTitle,
+            milestoneObjective,
+            activeFileName,
+            userCode,
+            testResults,
+            userQuery,
+            hintLevel
+        } = req.body;
+
+        const advice = await getAiMentorAdvice({
+            projectId,
+            projectTitle,
+            language,
+            milestoneIndex,
+            milestoneTitle,
+            milestoneObjective,
+            activeFileName,
+            userCode,
+            testResults,
+            userQuery,
+            hintLevel
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: advice
+        });
+    } catch (err) {
+        console.error("AI Mentor controller error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to generate AI mentor guidance.",
             error: err.message
         });
     }
