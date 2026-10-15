@@ -3,16 +3,24 @@ const authService = require('../services/authService');
 const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 
+const isProd = process.env.NODE_ENV === 'production';
+const getCookieOptions = () => ({
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+});
+
 exports.signUpController = async (req, res, next) => {
     const { name, role, email, password } = req.body;
     try {
         const result = await authService.registerUser({ name, role, email, password });
-        res.cookie('refreshToken', result.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+        res.cookie('refreshToken', result.refreshToken, getCookieOptions());
+        return res.status(200).json({ 
+            token: result.accessToken, 
+            refreshToken: result.refreshToken, 
+            user: result.user 
         });
-        return res.status(200).json({ token: result.accessToken, user: result.user });
     }
     catch (error) {
         return res.status(400).json({ message: error.message });
@@ -22,13 +30,13 @@ exports.loginController = async (req, res, next) => {
     const { email, password } = req.body;
     try {
         const result = await authService.loginUser({ email, password });
-        res.cookie('refreshToken', result.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
+        res.cookie('refreshToken', result.refreshToken, getCookieOptions());
         console.log("Login Successful!");
-        return res.status(200).json({ token: result.accessToken, user: result.user });
+        return res.status(200).json({ 
+            token: result.accessToken, 
+            refreshToken: result.refreshToken, 
+            user: result.user 
+        });
     }
     catch (error) {
         res.status(400).json({ message: error.message });
@@ -36,7 +44,8 @@ exports.loginController = async (req, res, next) => {
 }
 
 exports.refreshController = async (req, res, next) => {
-    const refreshToken = req.cookies.refreshToken;
+    // Support both HttpOnly cookie and body fallback for cross-site browser safety
+    const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
     if (!refreshToken) {
         return res.status(401).json({ message: "No refresh token found" });
     }
@@ -45,19 +54,31 @@ exports.refreshController = async (req, res, next) => {
         const user = await User.findById(decoded.id);
         if (!user) throw new Error("User not found");
         
+        const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
         const accessToken = jwt.sign(
-            { id: user._id, role: user.role },
+            { id: user._id, role: user.role, name: user.name },
             process.env.JWT_SECRET,
-            { expiresIn: '15m' }
+            { expiresIn: JWT_EXPIRES_IN }
         );
-        return res.status(200).json({ token: accessToken });
+        const newRefreshToken = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET + "_REFRESH",
+            { expiresIn: '30d' }
+        );
+
+        res.cookie('refreshToken', newRefreshToken, getCookieOptions());
+        return res.status(200).json({ token: accessToken, refreshToken: newRefreshToken });
     } catch (err) {
         return res.status(403).json({ message: "Invalid refresh token" });
     }
 };
 
 exports.logoutController = async (req, res, next) => {
-    res.clearCookie('refreshToken', { httpOnly: true, secure: process.env.NODE_ENV === 'production' });
+    res.clearCookie('refreshToken', { 
+        httpOnly: true, 
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax'
+    });
     return res.status(200).json({ message: "Logged out" });
 };
 exports.forgotPasswordController = async (req, res) => {

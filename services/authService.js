@@ -158,8 +158,9 @@ const registerUser = async ({ name, role, email, password }) => {
         password: hashed,
     });
 
-    const accessToken = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET + "_REFRESH", { expiresIn: '7d' });
+    const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+    const accessToken = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET + "_REFRESH", { expiresIn: '30d' });
     return {
         accessToken,
         refreshToken,
@@ -188,15 +189,16 @@ const loginUser = async ({ email, password }) => {
         throw new Error("Incorrect credentials. Please check your email and password.");
     }
 
+    const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
     const accessToken = jwt.sign(
         { id: user._id, role: user.role, name: user.name },
         process.env.JWT_SECRET,
-        { expiresIn: '15m' }
+        { expiresIn: JWT_EXPIRES_IN }
     );
     const refreshToken = jwt.sign(
         { id: user._id },
         process.env.JWT_SECRET + "_REFRESH",
-        { expiresIn: '7d' }
+        { expiresIn: '30d' }
     );
     return {
         accessToken,
