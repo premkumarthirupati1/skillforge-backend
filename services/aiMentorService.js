@@ -135,14 +135,19 @@ PEDAGOGICAL RULES:
    - Level 1 (Conceptual Nudge): Explain the architectural concept or invariant that was violated. Ask a reflective question.
    - Level 2 (Pinpoint Bug): Point directly to the function, struct, or file location causing the issue and explain why it behaves unexpectedly.
    - Level 3 (Structural Pattern): Provide a small, idiomatic code pattern or skeleton showing how to approach the fix, without writing the whole file.
-3. Be concise, technical, and empathetic. Output ONLY a valid JSON object with the following structure:
-{
-  "diagnosis": "Short 1-2 sentence explanation of what went wrong or direct answer to the query",
-  "hint": "The graduated hint tailored to Level ${hintLevel}",
-  "targetLine": <number or null if line can be identified in user code>,
-  "codePattern": "Small 2-5 line code snippet illustrating the concept (or empty string)",
-  "quickPrompts": ["3 short relevant follow-up questions user might ask"]
-}`;
+3. OUTPUT FORMAT REQUIREMENTS:
+   - Output ONLY a raw valid JSON object.
+   - Do NOT include markdown fences, preambles, or conversational greetings.
+   - Use double quotes for all keys: "diagnosis", "hint", "targetLine", "codePattern", "quickPrompts".
+   - Inside strings, use single quotes ('handle_client') or backticks (\`handle_client\`). NEVER use unescaped double quotes inside values.
+   - Schema:
+   {
+     "diagnosis": "Short 1-2 sentence explanation",
+     "hint": "The graduated hint for Level ${hintLevel}",
+     "targetLine": 14,
+     "codePattern": "2-4 line code snippet or empty string",
+     "quickPrompts": ["Q1", "Q2", "Q3"]
+   }`;
 
     const promptText = `
 Project: ${projectTitle} (${language})
@@ -161,7 +166,7 @@ ${failedStep ? `Failing Assertion: ${failedStep.name}\nDiagnostic Output: ${fail
 User Question: ${userQuery || "Please analyze why my tests failed and provide guidance."}
 Requested Hint Level: Level ${hintLevel} (1=Nudge, 2=Pinpoint, 3=Code Structure)
 
-Output strictly valid JSON with keys: "diagnosis", "hint", "targetLine", "codePattern", "quickPrompts".`;
+Return raw JSON only.`;
 
     const response = await fetch(endpoint, {
         method: "POST",
@@ -177,8 +182,8 @@ Output strictly valid JSON with keys: "diagnosis", "hint", "targetLine", "codePa
                 { role: "system", content: systemPrompt },
                 { role: "user", content: promptText }
             ],
-            temperature: 0.3,
-            max_tokens: 800,
+            temperature: 0.2,
+            max_tokens: 1200,
             response_format: { type: "json_object" }
         })
     });
@@ -191,18 +196,94 @@ Output strictly valid JSON with keys: "diagnosis", "hint", "targetLine", "codePa
     const rawContent = data?.choices?.[0]?.message?.content;
     if (!rawContent) return null;
 
+    return safelyParseAiJson(rawContent);
+}
+
+/**
+ * Resilient JSON Parser & Field Extractor
+ * Prevents raw JSON from leaking into the UI if LLM makes syntax errors.
+ */
+function safelyParseAiJson(rawText) {
+    if (!rawText || typeof rawText !== "string") return null;
+
+    // 1. Strip markdown fences
+    let cleaned = rawText.replace(/```(?:json)?\s*([\s\S]*?)\s*```/g, "$1").trim();
+
+    // 2. Fix malformed key syntax e.g. "hint: text" -> "hint": "text"
+    cleaned = cleaned.replace(/"(diagnosis|hint|targetLine|codePattern|quickPrompts):\s*/g, '"$1": "');
+
+    // 3. Try standard JSON parse
     try {
-        const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        return JSON.parse(cleaned);
+        const parsed = JSON.parse(cleaned);
+        if (parsed && typeof parsed === "object") {
+            return {
+                diagnosis: String(parsed.diagnosis || "").trim(),
+                hint: String(parsed.hint || parsed.explanation || "").trim(),
+                targetLine: typeof parsed.targetLine === "number" ? parsed.targetLine : (parseInt(parsed.targetLine, 10) || null),
+                codePattern: String(parsed.codePattern || "").trim(),
+                quickPrompts: Array.isArray(parsed.quickPrompts) ? parsed.quickPrompts : []
+            };
+        }
     } catch (e) {
+        // Continue to regex recovery
+    }
+
+    // 4. Regex extraction for each field
+    const extractString = (field) => {
+        const regex = new RegExp(`"${field}"\\s*:\\s*"([\\s\\S]*?)(?="\\s*,\\s*"|"\\s*\\}|$)`, "i");
+        const m = cleaned.match(regex);
+        if (m) {
+            let val = m[1].trim();
+            if (val.endsWith('"')) val = val.slice(0, -1);
+            return val.replace(/\\n/g, "\n").replace(/\\"/g, '"');
+        }
+        return null;
+    };
+
+    const diagnosis = extractString("diagnosis");
+    const hint = extractString("hint");
+    const codePattern = extractString("codePattern");
+
+    const lineMatch = cleaned.match(/"targetLine"\s*:\s*(\d+)/i);
+    const targetLine = lineMatch ? parseInt(lineMatch[1], 10) : null;
+
+    let quickPrompts = [];
+    const promptsMatch = cleaned.match(/"quickPrompts"\s*:\s*\[([\s\S]*?)\]/i);
+    if (promptsMatch) {
+        quickPrompts = [...promptsMatch[1].matchAll(/"([^"]+)"/g)].map(m => m[1]);
+    }
+
+    if (hint || diagnosis) {
         return {
-            diagnosis: rawContent.slice(0, 200),
-            hint: rawContent,
-            targetLine: null,
-            codePattern: "",
-            quickPrompts: ["Explain milestone objective", "How do I fix this error?"]
+            diagnosis: diagnosis || "Analysis complete",
+            hint: hint || (diagnosis ? "Review the implementation details above." : cleaned),
+            targetLine,
+            codePattern: codePattern || "",
+            quickPrompts: quickPrompts.length > 0 ? quickPrompts : [
+                "How do I fix this?",
+                "Give me a subtle hint",
+                "Show code pattern"
+            ]
         };
     }
+
+    // 5. Ultimate fallback: Clean out any JSON braces/keys so user never sees raw JSON
+    const humanText = cleaned
+        .replace(/[{}]/g, "")
+        .replace(/"diagnosis"\s*:\s*"?/gi, "")
+        .replace(/"hint"\s*:\s*"?/gi, "")
+        .replace(/"codePattern"\s*:\s*"?/gi, "\n\nCode Pattern:\n")
+        .replace(/"quickPrompts"[\s\S]*$/, "")
+        .replace(/"/g, "")
+        .trim();
+
+    return {
+        diagnosis: "Staff Engineer Analysis",
+        hint: humanText || cleaned,
+        targetLine: null,
+        codePattern: "",
+        quickPrompts: ["Explain milestone objective", "How do I fix this error?"]
+    };
 }
 
 /**
