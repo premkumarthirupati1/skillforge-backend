@@ -77,11 +77,18 @@ try:
     start_compile = time.perf_counter()
     with open("${mainFile.replace(/\\/g, '/')}", "r", encoding="utf-8") as f:
         code_str = f.read()
-    compile(code_str, "${mainFile.replace(/\\/g, '/')}", "exec")
+    compiled_code = compile(code_str, "${mainFile.replace(/\\/g, '/')}", "exec")
     compile_time = (time.perf_counter() - start_compile) * 1000
 
     # User code compiled with 0 syntax errors
     results["logs"].append(f"✓ Python 3.13 compilation clean in {compile_time:.1f}ms")
+
+    # Execute user code in isolated namespace
+    user_globals = {
+        "__name__": "__main__",
+        "__file__": "${mainFile.replace(/\\/g, '/')}"
+    }
+    exec(compiled_code, user_globals)
 
     # Evaluate test assertions
     cases = ${JSON.stringify(testCases || [])}
@@ -104,12 +111,25 @@ try:
         })
 
 except SyntaxError as e:
-    results["error"] = f"SyntaxError in {e.filename} on line {e.lineno}: {e.msg}"
+    err_line = (e.text or '').strip()
+    hint = ""
+    if "//" in err_line:
+        hint = "\\n💡 SkillForge Tip: In Python, comments start with '#' (not '//'). '//' is the floor division operator."
+    elif "console.log" in err_line:
+        hint = "\\n💡 SkillForge Tip: In Python, use print(...) instead of console.log(...)."
+    elif "function " in err_line:
+        hint = "\\n💡 SkillForge Tip: In Python, define functions using 'def func_name():' instead of 'function'."
+    elif any(k in err_line for k in ["let ", "const ", "var "]):
+        hint = "\\n💡 SkillForge Tip: In Python, variables are declared directly without 'let', 'const', or 'var'."
+    elif "module.exports" in err_line or "export default" in err_line:
+        hint = "\\n💡 SkillForge Tip: In Python, functions and classes are exported by name or with __all__ = [...]."
+
+    results["error"] = f"SyntaxError in {e.filename} on line {e.lineno}: {e.msg}{hint}"
     results["steps"].append({
         "name": "Compilation & Syntax Verification",
         "passed": False,
         "duration": "0.1ms",
-        "output": f"SyntaxError line {e.lineno}: {e.msg}\\n{e.text or ''}"
+        "output": f"SyntaxError line {e.lineno}: {e.msg}\\n{err_line}{hint}"
     })
 except Exception as e:
     results["error"] = traceback.format_exc()
