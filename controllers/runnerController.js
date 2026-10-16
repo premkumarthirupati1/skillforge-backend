@@ -59,7 +59,8 @@ exports.getAiMentorAssistance = async (req, res) => {
             userCode,
             testResults,
             userQuery,
-            hintLevel
+            hintLevel,
+            isAgent
         } = req.body;
 
         const advice = await getAiMentorAdvice({
@@ -76,7 +77,8 @@ exports.getAiMentorAssistance = async (req, res) => {
             userCode,
             testResults,
             userQuery,
-            hintLevel
+            hintLevel,
+            isAgent: Boolean(isAgent)
         });
 
         return res.status(200).json({

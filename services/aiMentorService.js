@@ -50,7 +50,8 @@ async function getAiMentorAdvice({
     userCode = "",
     testResults = null,
     userQuery = "",
-    hintLevel = 1
+    hintLevel = 1,
+    isAgent = false
 }) {
     // 1. Try OpenRouter API (Qwen 2.5 Coder 32B / Open-Source LLMs)
     const openRouterKey = process.env.OPENROUTER_API_KEY;
@@ -73,12 +74,13 @@ async function getAiMentorAdvice({
                 userCode,
                 testResults,
                 userQuery,
-                hintLevel
+                hintLevel,
+                isAgent
             });
             if (llmResult && llmResult.diagnosis) {
                 return {
                     ...llmResult,
-                    modelUsed: `Qwen 2.5 Coder 32B (OpenRouter)`,
+                    modelUsed: isAgent ? `Qwen 2.5 Coder 32B (Agent Mode)` : `Qwen 2.5 Coder 32B (OpenRouter)`,
                     isLiveAI: true
                 };
             }
@@ -106,12 +108,13 @@ async function getAiMentorAdvice({
                 userCode,
                 testResults,
                 userQuery,
-                hintLevel
+                hintLevel,
+                isAgent
             });
             if (llmResult && llmResult.diagnosis) {
                 return {
                     ...llmResult,
-                    modelUsed: "Forge Copilot (Gemini-Enhanced)",
+                    modelUsed: isAgent ? "Forge Copilot (Agent Mode - Gemini)" : "Forge Copilot (Gemini-Enhanced)",
                     isLiveAI: true
                 };
             }
@@ -135,12 +138,13 @@ async function getAiMentorAdvice({
         userCode,
         testResults,
         userQuery,
-        hintLevel
+        hintLevel,
+        isAgent
     });
 
     return {
         ...heuristicResult,
-        modelUsed: "Forge Heuristic Diagnostic Engine",
+        modelUsed: isAgent ? "Forge Heuristic Diagnostic Engine (Agent Mode)" : "Forge Heuristic Diagnostic Engine",
         isLiveAI: false
     };
 }
@@ -164,7 +168,8 @@ async function callOpenRouterMentor({
     userCode,
     testResults,
     userQuery,
-    hintLevel
+    hintLevel,
+    isAgent = false
 }) {
     const endpoint = "https://openrouter.ai/api/v1/chat/completions";
 
@@ -200,23 +205,43 @@ ARCHITECTURAL BLUEPRINT MANDATE:
   "codePattern": "Core architectural interface or struct in ${language}",
   "quickPrompts": ["How does concurrency scale under load?", "What happens during network partitions or crashes?", "Explain the internal buffer framing"]
 }`;
+    } else if (isAgent) {
+        systemPrompt = `You are "Forge Copilot" operating in autonomous AGENT MODE — an elite Principal Staff Systems Engineer for SkillForge (a hands-on developer engineering platform).
+The engineer is requesting an authoritative, end-to-end diagnostic investigation, invariant audit, and code pattern solution for "${projectTitle}" (${language}).
+
+AUTONOMOUS AGENT REASONING MANDATE:
+1. Conduct an exhaustive root-cause and invariant audit of the source code against the milestone specifications and test targets.
+2. Structure your "hint" in pristine GitHub-flavored Markdown with clear sections:
+   - ### 🔍 Root Cause Analysis: Explain the exact underlying mechanism or assertion mismatch causing the failure or issue.
+   - ### 🛡️ Invariant & Edge Cases: Enumerate the system invariants, memory/concurrency boundaries, or protocol edge cases.
+   - ### ⚡ Production Fix Strategy: Walk through the algorithmic steps to resolve the issue with surgical clarity.
+3. In "codePattern", provide the complete, idiomatic implementation snippet in ${language} implementing the key logic or pattern.
+4. Output raw valid JSON strictly matching this schema:
+{
+  "diagnosis": "Executive Staff Engineer root-cause diagnosis (1-2 sentences)",
+  "hint": "The complete markdown root cause analysis, invariant audit, and fix walkthrough with headers",
+  "targetLine": ${lineCount > 0 ? "1-based integer line number or null" : "null"},
+  "codePattern": "Idiomatic, production-grade code snippet in ${language}",
+  "quickPrompts": ["How to optimize this for high throughput?", "What benchmark test should I add?", "Explain edge case handling"]
+}`;
     } else {
         systemPrompt = `You are "Forge Copilot", an elite Staff Systems Engineer and pedagogical coding mentor for SkillForge (a hands-on developer engineering platform).
 You guide engineers building production-grade software (Redis in Rust, Raft in Go, Local RAG in Python, Distributed Systems, Canvas in TypeScript, API Gateways in Go, Web Audio, CI/CD runners).
 
 PEDAGOGICAL CONTRACT:
-1. NEVER output the full solution code or rewrite entire files. Guide the engineer with surgical accuracy to discover and understand the fix themselves.
+1. When the developer asks a specific question (e.g. "Why did my test fail?", "How does this work?", or custom inquiry), provide an actionable, thorough, and informative technical answer. Directly explain the architectural invariant, protocol rule, and system mechanism.
 2. Ground all diagnoses strictly in the provided project specification rules and unit assertions.
-3. Match the requested Hint Level strictly:
+3. If no failing test results are present and the developer asks why their test failed, inform them that no test failures are currently recorded in the runner, advise them to click 'Run Tests' in the bottom drawer, and outline the key specifications required by Milestone ${milestoneIndex + 1}.
+4. Match the requested Hint Level:
    - Level 1 (Conceptual Nudge): Explain the architectural invariant, protocol rule, or concept that was violated. Ask a reflective Socratic question. Set "codePattern" to "".
    - Level 2 (Pinpoint Bug): Point directly to the exact function, struct, line, or logic branch causing the failure. Explain clearly *why* the current code fails the assertion.
    - Level 3 (Structural Pattern): Provide a concise 2-6 line idiomatic code pattern or skeleton in ${language} demonstrating how to implement the required behavior.
-4. TARGET LINE ACCURACY:
+5. TARGET LINE ACCURACY:
    - The active file "${activeFileName}" has exactly ${lineCount} lines (numbered 1 to ${lineCount}).
    - If a specific line in the active file contains the bug, missing call, or flawed logic, return that 1-indexed number in "targetLine" (must be between 1 and ${lineCount}).
    - If the issue is due to missing functions, missing architecture, another file, or general structure, return null for "targetLine".
    - CRITICAL: NEVER return a line number greater than ${lineCount}.
-5. OUTPUT FORMAT:
+6. OUTPUT FORMAT:
    - Output ONLY a raw valid JSON object.
    - Do NOT include markdown fences, greetings, or conversational preambles.
    - Schema:
@@ -263,10 +288,11 @@ ${numberedCode.slice(0, 4500)}
     }
 
     promptText += `Test Run Results:
-${failedStep ? `❌ Failing Assertion: ${failedStep.name}\nDiagnostic Output: ${failedStep.output}` : "General analysis requested (all tests currently passing or pending execution)."}
+${failedStep ? `❌ Failing Assertion: ${failedStep.name}\nDiagnostic Output: ${failedStep.output}` : "⚠️ Runner Status: No active test failures currently registered. (The developer either has not yet clicked 'Run Tests', or all executed tests are currently passing)."}
 
 User Question / Context: ${userQuery || "Please analyze why my tests failed and provide guidance."}
 Requested Hint Level: Level ${hintLevel} (1=Conceptual Nudge, 2=Pinpoint Bug, 3=Structural Pattern)
+${isAgent ? "Execution Mode: AGENT MODE (Staff Engineer Invariant & Root-Cause Audit)" : ""}
 
 Remember: Output raw valid JSON only. If targetLine is specified, it must be between 1 and ${lineCount}, or null.`;
 
@@ -285,7 +311,7 @@ Remember: Output raw valid JSON only. If targetLine is specified, it must be bet
                 { role: "user", content: promptText }
             ],
             temperature: 0.2,
-            max_tokens: isArch ? 2800 : 1200,
+            max_tokens: (isArch || isAgent) ? 2800 : 1200,
             response_format: { type: "json_object" }
         })
     });
@@ -490,7 +516,8 @@ async function callGeminiMentor({
     userCode,
     testResults,
     userQuery,
-    hintLevel
+    hintLevel,
+    isAgent = false
 }) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
@@ -525,18 +552,39 @@ ARCHITECTURAL BLUEPRINT MANDATE:
   "codePattern": "Core architectural interface or struct in ${language}",
   "quickPrompts": ["How does concurrency scale under load?", "What happens during network partitions or crashes?", "Explain the internal buffer framing"]
 }`;
+    } else if (isAgent) {
+        systemPrompt = `You are "Forge Copilot" operating in autonomous AGENT MODE — an elite Principal Staff Systems Engineer for SkillForge.
+The engineer is requesting an authoritative, end-to-end diagnostic investigation, invariant audit, and code pattern solution for "${projectTitle}" (${language}).
+
+AUTONOMOUS AGENT REASONING MANDATE:
+1. Conduct an exhaustive root-cause and invariant audit of the source code against milestone specifications.
+2. Structure your "hint" in pristine Markdown with clear sections:
+   - ### 🔍 Root Cause Analysis: Explain the exact mechanism or assertion mismatch causing the failure.
+   - ### 🛡️ Invariant & Edge Cases: Enumerate the system invariants, memory/concurrency boundaries, or protocol edge cases.
+   - ### ⚡ Production Fix Strategy: Walk through the algorithmic steps to resolve the issue with surgical clarity.
+3. In "codePattern", provide the complete, idiomatic implementation snippet in ${language} implementing the key logic.
+4. Output raw valid JSON strictly matching this schema:
+{
+  "diagnosis": "Executive Staff Engineer root-cause diagnosis (1-2 sentences)",
+  "hint": "The complete markdown root cause analysis, invariant audit, and fix walkthrough with headers",
+  "targetLine": ${lineCount > 0 ? "1-based integer line number or null" : "null"},
+  "codePattern": "Idiomatic, production-grade code snippet in ${language}",
+  "quickPrompts": ["How to optimize this for high throughput?", "What benchmark test should I add?", "Explain edge case handling"]
+}`;
     } else {
         systemPrompt = `You are "Forge Copilot", an elite Staff Engineer and coding mentor for SkillForge.
 You guide developers building production-grade software (Redis in Rust, Raft in Go, Local RAG in Python, API Gateway in Go, Git in Rust, Canvas, Synthesizer).
 
 PEDAGOGICAL RULES:
-1. NEVER output the full solution code. Guide the learner to understand the bug themselves.
-2. Match the requested Hint Level strictly:
+1. When the developer asks a specific question (e.g. "Why did my test fail?", "How does this work?", or custom query), provide an actionable, thorough, and informative technical answer. Directly explain the architectural invariant, protocol rule, and system mechanism.
+2. Ground all diagnoses strictly in the provided project specification rules and unit assertions.
+3. If no failing test results are present and the developer asks why their test failed, inform them that no test failures are currently recorded in the runner, advise them to click 'Run Tests' in the bottom drawer, and outline the key specifications required by Milestone ${milestoneIndex + 1}.
+4. Match the requested Hint Level strictly:
    - Level 1 (Conceptual Nudge): Explain the architectural concept or invariant that was violated. Ask a reflective question. Set codePattern to "".
    - Level 2 (Pinpoint Bug): Point directly to the function, struct, or file location causing the issue and explain why it behaves unexpectedly.
    - Level 3 (Structural Pattern): Provide a small, idiomatic code pattern (2-5 lines) showing how to approach the fix.
-3. Target Line Accuracy: The active file has ${lineCount} lines. If targetLine is set, it MUST be an integer between 1 and ${lineCount}, or null.
-4. Return strictly valid JSON:
+5. Target Line Accuracy: The active file has ${lineCount} lines. If targetLine is set, it MUST be an integer between 1 and ${lineCount}, or null.
+6. Return strictly valid JSON:
 {
   "diagnosis": "Short 1-2 sentence explanation of what went wrong or answers the query",
   "hint": "The graduated hint tailored to Level ${hintLevel}",
@@ -567,10 +615,11 @@ ${numberedCode.slice(0, 4000)}
 \`\`\`
 
 Test Results:
-${failedStep ? `Failing Assertion: ${failedStep.name}\nDiagnostic Output: ${failedStep.output}` : "General inspection requested."}
+${failedStep ? `❌ Failing Assertion: ${failedStep.name}\nDiagnostic Output: ${failedStep.output}` : "⚠️ Runner Status: No active test failures currently registered. (The developer either has not yet clicked 'Run Tests', or all executed tests are currently passing)."}
 
 User Question: ${userQuery || "Please analyze why my tests failed and provide guidance."}
 Requested Hint Level: Level ${hintLevel} (1=Nudge, 2=Pinpoint, 3=Code Structure)
+${isAgent ? "Execution Mode: AGENT MODE (Staff Engineer Invariant & Root-Cause Audit)" : ""}
 
 Return ONLY valid JSON.`;
 
@@ -581,7 +630,7 @@ Return ONLY valid JSON.`;
             contents: [{ parts: [{ text: systemPrompt + "\n\n" + promptText }] }],
             generationConfig: {
                 temperature: 0.2,
-                maxOutputTokens: isArch ? 2500 : 1000,
+                maxOutputTokens: (isArch || isAgent) ? 2600 : 1000,
                 responseMimeType: "application/json"
             }
         })
@@ -1253,7 +1302,7 @@ const TRACK_KNOWLEDGE = {
             title: "Base62 Encoding & Decoding",
             concept: "Bijective mapping between 64-bit integer IDs and Base62 strings (`0-9a-zA-Z`).",
             defaultDiagnosis: "Base62 encoding logic error: Must accurately map positive integers to 6-8 character strings and back.",
-            nudge: "Base62 uses characters `0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ`. Convert numbers by repeated modulo 62 and division.",
+            nudge: "Base62 uses alphanumeric characters (digits 0-9, lowercase a-z, uppercase A-Z). Convert numbers by repeated modulo 62 and division.",
             pinpoint: "In `src/base62.js`, verify `encode(id)`. While `id > 0`, prepend `CHARSET[id % 62]` and set `id = Math.floor(id / 62)`.",
             pattern: "const CHARSET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';\nexport function encodeBase62(num) {\n    if (num === 0) return CHARSET[0];\n    let str = '';\n    while (num > 0) {\n        str = CHARSET[num % 62] + str;\n        num = Math.floor(num / 62);\n    }\n    return str;\n}",
             quickPrompts: ["Why Base62 instead of Base64 for URLs?", "What is the max number of URLs for 7 chars?", "How to prevent sequential URL enumeration?"]
@@ -1472,7 +1521,8 @@ function analyzeWithExpertHeuristics({
     userCode = "",
     testResults = null,
     userQuery = "",
-    hintLevel = 1
+    hintLevel = 1,
+    isAgent = false
 }) {
     const code = (userCode || "").trim();
     const failedStep = testResults?.steps?.find(s => !s.passed) || null;
@@ -1528,7 +1578,7 @@ pub trait SystemEngine {
                 level: hintLevel,
                 targetLine: null,
                 hint: `${arch.summary}\n${diagramMarkdown}`,
-                codePattern: arch.codePattern || (hintLevel === 3 ? (milestoneInfo.pattern || "") : ""),
+                codePattern: arch.codePattern || (hintLevel === 3 || isAgent ? (milestoneInfo.pattern || "") : ""),
                 quickPrompts: arch.quickPrompts || ["How does data flow between components?", "What edge cases exist?", "Show code pattern"]
             };
         }
@@ -1539,15 +1589,24 @@ pub trait SystemEngine {
                 const targetL = findLineNumber(code, [testName.toLowerCase(), "todo", "error", "return", "write"]);
                 return {
                     diagnosis: `Failing Test: '${testName}' failed with: ${testOutput}`,
-                    level: hintLevel,
+                    level: isAgent ? 3 : hintLevel,
                     targetLine: targetL,
-                    hint: hintLevel === 1
+                    hint: (hintLevel === 1 && !isAgent)
                         ? `The test harness expects: ${milestoneInfo.concept || milestoneObjective}. Your code did not return the expected output.`
-                        : hintLevel === 2
+                        : (hintLevel === 2 && !isAgent)
                         ? (milestoneInfo.pinpoint || `Check the implementation for ${testName}. The runner verifies conformance against Milestone ${milestoneIndex + 1} specs.`)
                         : (milestoneInfo.pattern || "Review the milestone rules in the Spec Guide tab."),
-                    codePattern: hintLevel === 3 ? (milestoneInfo.pattern || "") : "",
+                    codePattern: (hintLevel === 3 || isAgent) ? (milestoneInfo.pattern || "") : "",
                     quickPrompts: ["Give me a subtle hint", "Check my code for edge cases", "Explain milestone architecture"]
+                };
+            } else {
+                return {
+                    diagnosis: `No Failing Test Detected in Workspace Runner`,
+                    level: hintLevel,
+                    targetLine: null,
+                    hint: `There are currently no failing test results in your runner for Milestone ${milestoneIndex + 1} (${milestoneInfo.title || milestoneTitle}).\n\nTo diagnose a test failure:\n1. Click the **Run Tests** button in the bottom drawer to execute the automated verification suite.\n2. If a specific assertion fails, Copilot will automatically analyze the failure trace, pinpoint the problematic line, and explain why it failed.\n\nIf you have a question about implementing this milestone, ask me how to structure the logic or request an architecture blueprint!`,
+                    codePattern: "",
+                    quickPrompts: ["What edge cases exist?", "Explain milestone architecture", "Show code pattern"]
                 };
             }
         }
