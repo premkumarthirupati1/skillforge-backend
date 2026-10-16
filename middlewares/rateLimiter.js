@@ -71,9 +71,28 @@ const searchLimiter = rateLimit({
     }
 });
 
+/**
+ * 5. OTP Rate Limiter
+ * Applied to OTP verification and resend endpoints.
+ * Limit: 20 attempts per 15 minutes per IP
+ */
+const otpLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: {
+        success: false,
+        status: 429,
+        message: "Too many verification attempts. Please wait 15 minutes before trying again."
+    }
+});
+
 module.exports = {
     globalLimiter,
     authLimiter,
+    otpLimiter,
     paymentLimiter,
     searchLimiter
 };
+

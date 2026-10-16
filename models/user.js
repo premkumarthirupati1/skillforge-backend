@@ -57,7 +57,28 @@ const userSchema = new mongoose.Schema(
         tokenHash: String,
         expiry: Date
       }
-    ]
+    ],
+    isEmailVerified: {
+      type: Boolean,
+      default: false
+    },
+    otpHash: {
+      type: String,
+      select: false
+    },
+    otpExpiry: {
+      type: Date,
+      select: false
+    },
+    otpAttempts: {
+      type: Number,
+      default: 0,
+      select: false
+    },
+    otpLastSentAt: {
+      type: Date,
+      select: false
+    }
   },
   { timestamps: true }
 );
@@ -68,6 +89,10 @@ userSchema.set('toJSON', {
     delete ret.resetToken;
     delete ret.resetTokens;
     delete ret.resetTokenExpiry;
+    delete ret.otpHash;
+    delete ret.otpExpiry;
+    delete ret.otpAttempts;
+    delete ret.otpLastSentAt;
     delete ret.__v;
     return ret;
   }
@@ -79,6 +104,10 @@ userSchema.set('toObject', {
     delete ret.resetToken;
     delete ret.resetTokens;
     delete ret.resetTokenExpiry;
+    delete ret.otpHash;
+    delete ret.otpExpiry;
+    delete ret.otpAttempts;
+    delete ret.otpLastSentAt;
     delete ret.__v;
     return ret;
   }

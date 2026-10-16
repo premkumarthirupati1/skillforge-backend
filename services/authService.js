@@ -114,6 +114,114 @@ const sendViaBrevo = async ({ to, subject, html }) => {
         return false;
     }
 };
+const generateOtp = () => {
+    return crypto.randomInt(100000, 1000000).toString();
+};
+
+const hashOtp = (otp) => {
+    return crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
+};
+
+const sendOtpEmail = async ({ to, name, otp }) => {
+    const senderEmail = process.env.EMAIL_USER || "skillforge.noreply@gmail.com";
+    const subject = `SkillForge - ${otp} is your verification code`;
+    const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>SkillForge Email Verification</title>
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #0b0f19; padding: 40px 16px;">
+            <tr>
+              <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 540px; background-color: #111827; border: 1px solid #1f2937; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+                  <!-- Header -->
+                  <tr>
+                    <td style="padding: 32px 32px 20px 32px; text-align: center; border-bottom: 1px solid #1f2937;">
+                      <h1 style="margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: #3b82f6;">Skill<span style="color: #60a5fa;">Forge</span></h1>
+                      <p style="margin: 6px 0 0 0; font-size: 13px; color: #94a3b8; font-weight: 500;">Secure Engineering Workspace</p>
+                    </td>
+                  </tr>
+
+                  <!-- Content -->
+                  <tr>
+                    <td style="padding: 36px 32px;">
+                      <h2 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #ffffff;">Verify Your Email Address</h2>
+                      <p style="margin: 0 0 24px 0; font-size: 14px; line-height: 1.6; color: #94a3b8;">
+                        Hello <strong style="color: #f1f5f9;">${name ? name : 'Developer'}</strong>,<br/>
+                        Welcome to SkillForge. Enter the following 6-digit verification code to complete your registration and activate your developer sandbox:
+                      </p>
+
+                      <!-- OTP Box -->
+                      <div style="background-color: #0b0f19; border: 2px dashed #3b82f6; border-radius: 12px; padding: 24px; text-align: center; margin: 28px 0;">
+                        <span style="font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 38px; font-weight: 800; letter-spacing: 10px; color: #60a5fa; display: inline-block;">
+                          ${otp}
+                        </span>
+                        <div style="margin-top: 10px; font-size: 12px; color: #64748b; font-weight: 500;">
+                          Valid for <strong>10 minutes</strong> &bull; Do not share this code
+                        </div>
+                      </div>
+
+                      <p style="margin: 0 0 16px 0; font-size: 13px; line-height: 1.6; color: #94a3b8;">
+                        If you did not initiate this request, you can safely ignore this email. Your account remains protected.
+                      </p>
+                    </td>
+                  </tr>
+
+                  <!-- Footer -->
+                  <tr>
+                    <td style="padding: 20px 32px; background-color: #0b0f19; border-top: 1px solid #1f2937; text-align: center;">
+                      <p style="margin: 0; font-size: 11px; color: #64748b; line-height: 1.5;">
+                        &copy; ${new Date().getFullYear()} SkillForge Platform. Encrypted with SHA-256 OTP verification.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+    `;
+
+    // Asynchronously dispatch email without blocking client response
+    (async () => {
+        // Attempt 1: Brevo HTTPS API
+        let sent = await sendViaBrevo({ to, subject, html });
+
+        // Attempt 2: Resend HTTPS API
+        if (!sent) {
+            sent = await sendViaResend({ to, subject, html });
+        }
+
+        // Attempt 3: SMTP Nodemailer
+        if (!sent) {
+            const transporter = getTransporter();
+            if (transporter) {
+                try {
+                    await transporter.sendMail({
+                        from: `"SkillForge Security" <${senderEmail}>`,
+                        to,
+                        subject,
+                        html
+                    });
+                    console.log(`✅ OTP email delivered via SMTP to ${to}`);
+                    sent = true;
+                } catch (mailError) {
+                    console.warn("⚠️ SMTP delivery note:", mailError.message);
+                }
+            }
+        }
+
+        // Fallback console log for local development & debugging
+        console.log("\n=======================================================");
+        console.log(`🔑 [DEV/FALLBACK] VERIFICATION OTP FOR ${to}: ${otp}`);
+        console.log("=======================================================\n");
+    })().catch(err => console.error("OTP Email dispatch error:", err));
+};
 
 const registerUser = async ({ name, role, email, password }) => {
     // 1. Name validation
@@ -145,22 +253,140 @@ const registerUser = async ({ name, role, email, password }) => {
     const userRole = validRoles.includes(role) ? role : "student";
 
     // 5. Check if user already exists
-    const existingUser = await User.findOne({ email: normalizedEmail });
+    const existingUser = await User.findOne({ email: normalizedEmail }).select("+otpLastSentAt");
+    const otp = generateOtp();
+    const hashedOtp = hashOtp(otp);
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
     if (existingUser) {
-        throw new Error("An account with this email address already exists.");
+        if (existingUser.isEmailVerified) {
+            throw new Error("An account with this email address already exists. Please log in.");
+        }
+
+        // If existing user was unverified, update details and send fresh OTP
+        const hashed = await bcrypt.hash(password, 12);
+        existingUser.name = trimmedName;
+        existingUser.role = userRole;
+        existingUser.password = hashed;
+        existingUser.otpHash = hashedOtp;
+        existingUser.otpExpiry = otpExpiry;
+        existingUser.otpAttempts = 0;
+        existingUser.otpLastSentAt = new Date();
+        await existingUser.save();
+
+        await sendOtpEmail({ to: normalizedEmail, name: trimmedName, otp });
+
+        return {
+            requiresOtp: true,
+            email: normalizedEmail,
+            message: "A verification code has been sent to your email."
+        };
     }
 
     const hashed = await bcrypt.hash(password, 12);
-    const user = await User.create({
+    await User.create({
         name: trimmedName,
         role: userRole,
         email: normalizedEmail,
         password: hashed,
+        isEmailVerified: false,
+        otpHash: hashedOtp,
+        otpExpiry: otpExpiry,
+        otpAttempts: 0,
+        otpLastSentAt: new Date()
     });
 
+    await sendOtpEmail({ to: normalizedEmail, name: trimmedName, otp });
+
+    return {
+        requiresOtp: true,
+        email: normalizedEmail,
+        message: "A verification code has been sent to your email."
+    };
+};
+
+const verifyOtp = async ({ email, otp }) => {
+    const normalizedEmail = (email || "").toLowerCase().trim();
+    const cleanOtp = (otp || "").toString().trim();
+
+    if (!normalizedEmail) {
+        throw new Error("Email is required.");
+    }
+    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+        throw new Error("Please enter a valid 6-digit verification code.");
+    }
+
+    const user = await User.findOne({ email: normalizedEmail }).select("+otpHash +otpExpiry +otpAttempts +otpLastSentAt");
+    if (!user) {
+        throw new Error("No account found with this email address.");
+    }
+
+    if (user.isEmailVerified) {
+        const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+        const accessToken = jwt.sign(
+            { id: user._id, role: user.role, name: user.name },
+            process.env.JWT_SECRET,
+            { expiresIn: JWT_EXPIRES_IN }
+        );
+        const refreshToken = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET + "_REFRESH",
+            { expiresIn: '30d' }
+        );
+        return {
+            accessToken,
+            refreshToken,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            }
+        };
+    }
+
+    // Check attempt limit
+    if ((user.otpAttempts || 0) >= 5) {
+        throw new Error("Too many failed attempts. Please request a new verification code.");
+    }
+
+    // Check expiry
+    if (!user.otpExpiry || new Date(user.otpExpiry).getTime() < Date.now()) {
+        throw new Error("Verification code has expired. Please request a new code.");
+    }
+
+    // Check hash
+    const inputHash = hashOtp(cleanOtp);
+    if (!user.otpHash || user.otpHash !== inputHash) {
+        user.otpAttempts = (user.otpAttempts || 0) + 1;
+        await user.save();
+        const remaining = Math.max(0, 5 - user.otpAttempts);
+        if (remaining === 0) {
+            throw new Error("Invalid code. Maximum attempts reached. Please request a new code.");
+        }
+        throw new Error(`Invalid verification code. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`);
+    }
+
+    // Verification successful
+    user.isEmailVerified = true;
+    user.otpHash = undefined;
+    user.otpExpiry = undefined;
+    user.otpAttempts = 0;
+    user.otpLastSentAt = undefined;
+    await user.save();
+
     const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-    const accessToken = jwt.sign({ id: user._id, role: user.role, name: user.name }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET + "_REFRESH", { expiresIn: '30d' });
+    const accessToken = jwt.sign(
+        { id: user._id, role: user.role, name: user.name },
+        process.env.JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN }
+    );
+    const refreshToken = jwt.sign(
+        { id: user._id },
+        process.env.JWT_SECRET + "_REFRESH",
+        { expiresIn: '30d' }
+    );
+
     return {
         accessToken,
         refreshToken,
@@ -173,13 +399,57 @@ const registerUser = async ({ name, role, email, password }) => {
     };
 };
 
+const resendOtp = async ({ email }) => {
+    const normalizedEmail = (email || "").toLowerCase().trim();
+    if (!normalizedEmail) {
+        throw new Error("Email is required.");
+    }
+
+    const user = await User.findOne({ email: normalizedEmail }).select("+otpHash +otpExpiry +otpAttempts +otpLastSentAt");
+    if (!user) {
+        throw new Error("No account found with this email address.");
+    }
+
+    if (user.isEmailVerified) {
+        return {
+            success: true,
+            alreadyVerified: true,
+            message: "Your email is already verified. You can sign in directly."
+        };
+    }
+
+    // Enforce 60s cooldown
+    const now = Date.now();
+    if (user.otpLastSentAt) {
+        const elapsedSeconds = Math.floor((now - new Date(user.otpLastSentAt).getTime()) / 1000);
+        if (elapsedSeconds < 60) {
+            const waitSeconds = 60 - elapsedSeconds;
+            throw new Error(`Please wait ${waitSeconds}s before requesting another verification code.`);
+        }
+    }
+
+    const otp = generateOtp();
+    user.otpHash = hashOtp(otp);
+    user.otpExpiry = new Date(now + 10 * 60 * 1000); // 10 minutes
+    user.otpAttempts = 0;
+    user.otpLastSentAt = new Date(now);
+    await user.save();
+
+    await sendOtpEmail({ to: user.email, name: user.name, otp });
+
+    return {
+        success: true,
+        message: "A fresh verification code has been sent to your email."
+    };
+};
+
 const loginUser = async ({ email, password }) => {
     const normalizedEmail = (email || "").toLowerCase().trim();
     if (!normalizedEmail || !password) {
         throw new Error("Please enter both your email address and password.");
     }
 
-    const user = await User.findOne({ email: normalizedEmail }).select("+password");
+    const user = await User.findOne({ email: normalizedEmail }).select("+password +otpLastSentAt");
     if (!user) {
         throw new Error("Incorrect credentials. Please check your email and password.");
     }
@@ -187,6 +457,31 @@ const loginUser = async ({ email, password }) => {
     const isEqual = await bcrypt.compare(password, user.password);
     if (!isEqual) {
         throw new Error("Incorrect credentials. Please check your email and password.");
+    }
+
+    // Check if user is verified
+    if (user.isEmailVerified === false) {
+        const now = Date.now();
+        const lastSent = user.otpLastSentAt ? new Date(user.otpLastSentAt).getTime() : 0;
+        let sentNew = false;
+        if (now - lastSent > 60 * 1000) {
+            const otp = generateOtp();
+            user.otpHash = hashOtp(otp);
+            user.otpExpiry = new Date(now + 10 * 60 * 1000);
+            user.otpAttempts = 0;
+            user.otpLastSentAt = new Date(now);
+            await user.save();
+            await sendOtpEmail({ to: user.email, name: user.name, otp });
+            sentNew = true;
+        }
+
+        return {
+            requiresOtp: true,
+            email: user.email,
+            message: sentNew 
+                ? "Your email is not verified. A verification code has been sent to your email." 
+                : "Your email is not verified. Please enter the verification code sent to your email."
+        };
     }
 
     const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -403,4 +698,12 @@ const resetPassword = async ({ email, token, password }) => {
     return { success: true, message: "Password updated successfully!" };
 };
 
-module.exports = { registerUser, loginUser, forgotPassword, forgotPasswordTokenCheck, resetPassword };
+module.exports = { 
+    registerUser, 
+    loginUser, 
+    verifyOtp, 
+    resendOtp, 
+    forgotPassword, 
+    forgotPasswordTokenCheck, 
+    resetPassword 
+};

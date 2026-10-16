@@ -15,6 +15,13 @@ exports.signUpController = async (req, res, next) => {
     const { name, role, email, password } = req.body;
     try {
         const result = await authService.registerUser({ name, role, email, password });
+        if (result.requiresOtp) {
+            return res.status(200).json({ 
+                requiresOtp: true, 
+                email: result.email, 
+                message: result.message 
+            });
+        }
         res.cookie('refreshToken', result.refreshToken, getCookieOptions());
         return res.status(200).json({ 
             token: result.accessToken, 
@@ -25,11 +32,19 @@ exports.signUpController = async (req, res, next) => {
     catch (error) {
         return res.status(400).json({ message: error.message });
     }
-}
+};
+
 exports.loginController = async (req, res, next) => {
     const { email, password } = req.body;
     try {
         const result = await authService.loginUser({ email, password });
+        if (result.requiresOtp) {
+            return res.status(200).json({ 
+                requiresOtp: true, 
+                email: result.email, 
+                message: result.message 
+            });
+        }
         res.cookie('refreshToken', result.refreshToken, getCookieOptions());
         console.log("Login Successful!");
         return res.status(200).json({ 
@@ -41,7 +56,33 @@ exports.loginController = async (req, res, next) => {
     catch (error) {
         res.status(400).json({ message: error.message });
     }
-}
+};
+
+exports.verifyOtpController = async (req, res, next) => {
+    const { email, otp } = req.body;
+    try {
+        const result = await authService.verifyOtp({ email, otp });
+        res.cookie('refreshToken', result.refreshToken, getCookieOptions());
+        return res.status(200).json({
+            token: result.accessToken,
+            refreshToken: result.refreshToken,
+            user: result.user,
+            message: "Email verified successfully!"
+        });
+    } catch (error) {
+        return res.status(400).json({ message: error.message });
+    }
+};
+
+exports.resendOtpController = async (req, res, next) => {
+    const { email } = req.body;
+    try {
+        const result = await authService.resendOtp({ email });
+        return res.status(200).json(result);
+    } catch (error) {
+        return res.status(400).json({ message: error.message });
+    }
+};
 
 exports.refreshController = async (req, res, next) => {
     // Support both HttpOnly cookie and body fallback for cross-site browser safety
