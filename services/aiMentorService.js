@@ -6,6 +6,34 @@
  */
 
 /**
+ * Detect queries requesting architecture, system design, topology, or diagrams
+ */
+function isArchitectureQuery(text = "") {
+    if (!text || typeof text !== "string") return false;
+    return /(architecture|system design|topology|diagram|flowchart|data flow|components|how it works|high level design|hld|low level design|lld|block diagram|design pattern|modules|workflow|overview|structure|visual|image|draw|blueprint)/i.test(text);
+}
+
+/**
+ * Generate a dark-themed SVG image URL via mermaid.ink
+ */
+function generateMermaidImageUrl(code) {
+    if (!code || typeof code !== "string") return null;
+    try {
+        const payload = {
+            code: code.trim(),
+            mermaid: {
+                theme: "dark"
+            }
+        };
+        const jsonStr = JSON.stringify(payload);
+        const base64 = Buffer.from(jsonStr).toString("base64");
+        return `https://mermaid.ink/svg/${base64}`;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
  * Main AI Mentor Entrypoint
  */
 async function getAiMentorAdvice({
@@ -148,7 +176,32 @@ async function callOpenRouterMentor({
     // Format code with 1-based line numbers so the LLM has exact ground truth coordinates
     const numberedCode = lines.map((l, i) => `${String(i + 1).padStart(3, ' ')} | ${l}`).join('\n');
 
-    const systemPrompt = `You are "Forge Copilot", an elite Staff Systems Engineer and pedagogical coding mentor for SkillForge (a hands-on developer engineering platform).
+    const isArch = isArchitectureQuery(userQuery);
+
+    let systemPrompt = "";
+    if (isArch) {
+        systemPrompt = `You are "Forge Copilot", an elite Principal Systems Architect and Staff Engineer for SkillForge (a hands-on engineering platform).
+The developer is requesting the system architecture, component topology, and visual data flow for "${projectTitle}" (${language}).
+
+ARCHITECTURAL BLUEPRINT MANDATE:
+1. Provide an exhaustive, Staff-Engineer level architecture blueprint tailored strictly to ${projectTitle}.
+2. CRITICAL: Include a complete, syntactically valid Mermaid architecture diagram enclosed in a \`\`\`mermaid\ngraph TD... block inside the "hint" markdown field.
+3. Explicitly break down:
+   - High-Level Subsystems & Component Responsibilities
+   - Request-Response & Data Flow Pipeline (Step-by-Step)
+   - Concurrency, Mutex Locking & State Invariants
+   - Edge Cases & Production Failure Modes
+4. Output raw valid JSON strictly matching this schema:
+{
+  "diagnosis": "Executive architectural overview for ${projectTitle} (1-2 sentences)",
+  "hint": "The complete Markdown Architecture Blueprint including ## Headings, bullet points, data flow, and the \`\`\`mermaid\\ngraph TD... block",
+  "mermaidDiagram": "The standalone raw Mermaid diagram code string",
+  "targetLine": null,
+  "codePattern": "Core architectural interface or struct in ${language}",
+  "quickPrompts": ["How does concurrency scale under load?", "What happens during network partitions or crashes?", "Explain the internal buffer framing"]
+}`;
+    } else {
+        systemPrompt = `You are "Forge Copilot", an elite Staff Systems Engineer and pedagogical coding mentor for SkillForge (a hands-on developer engineering platform).
 You guide engineers building production-grade software (Redis in Rust, Raft in Go, Local RAG in Python, Distributed Systems, Canvas in TypeScript, API Gateways in Go, Web Audio, CI/CD runners).
 
 PEDAGOGICAL CONTRACT:
@@ -174,6 +227,7 @@ PEDAGOGICAL CONTRACT:
      "codePattern": "",
      "quickPrompts": ["Follow-up question 1", "Follow-up question 2", "Follow-up question 3"]
    }`;
+    }
 
     let promptText = `Project: ${projectTitle} (${language})
 Milestone ${milestoneIndex + 1}: ${milestoneTitle}
@@ -231,7 +285,7 @@ Remember: Output raw valid JSON only. If targetLine is specified, it must be bet
                 { role: "user", content: promptText }
             ],
             temperature: 0.2,
-            max_tokens: 1200,
+            max_tokens: isArch ? 2800 : 1200,
             response_format: { type: "json_object" }
         })
     });
@@ -244,7 +298,8 @@ Remember: Output raw valid JSON only. If targetLine is specified, it must be bet
     const rawContent = data?.choices?.[0]?.message?.content;
     if (!rawContent) return null;
 
-    return safelyParseAiJson(rawContent, lineCount);
+    const parsed = safelyParseAiJson(rawContent, lineCount);
+    return enrichWithMermaidSvg(parsed, projectTitle, projectId, isArch);
 }
 
 /**
@@ -276,6 +331,7 @@ function safelyParseAiJson(rawText, maxLineCount = null) {
             return {
                 diagnosis: String(parsed.diagnosis || "").trim(),
                 hint: String(parsed.hint || parsed.explanation || "").trim(),
+                mermaidDiagram: String(parsed.mermaidDiagram || parsed.diagram || parsed.mermaid || "").trim(),
                 targetLine: sanitizeTargetLine(parsed.targetLine),
                 codePattern: String(parsed.codePattern || "").trim(),
                 quickPrompts: Array.isArray(parsed.quickPrompts) ? parsed.quickPrompts : []
@@ -299,6 +355,7 @@ function safelyParseAiJson(rawText, maxLineCount = null) {
 
     const diagnosis = extractString("diagnosis");
     const hint = extractString("hint");
+    const mermaidDiagram = extractString("mermaidDiagram") || extractString("diagram") || extractString("mermaid");
     const codePattern = extractString("codePattern");
 
     const lineMatch = cleaned.match(/"targetLine"\s*:\s*(\d+)/i);
@@ -314,6 +371,7 @@ function safelyParseAiJson(rawText, maxLineCount = null) {
         return {
             diagnosis: diagnosis || "Analysis complete",
             hint: hint || (diagnosis ? "Review the implementation details above." : cleaned),
+            mermaidDiagram: mermaidDiagram || "",
             targetLine,
             codePattern: codePattern || "",
             quickPrompts: quickPrompts.length > 0 ? quickPrompts : [
@@ -337,10 +395,82 @@ function safelyParseAiJson(rawText, maxLineCount = null) {
     return {
         diagnosis: "Staff Engineer Analysis",
         hint: humanText || cleaned,
+        mermaidDiagram: "",
         targetLine: null,
         codePattern: "",
         quickPrompts: ["Explain milestone objective", "How do I fix this error?"]
     };
+}
+
+/**
+ * Automatically detects and injects mermaid.ink SVG dark image if a mermaid diagram exists,
+ * or wraps plain text diagrams in ```mermaid blocks, or injects track architecture diagram.
+ */
+function enrichWithMermaidSvg(result, projectTitle = "System", projectId = "redis-clone", isArch = false) {
+    if (!result || typeof result !== "object") return result;
+
+    let hintText = result.hint || "";
+    let mermaidCode = "";
+
+    // 1. Direct field in result
+    if (result.mermaidDiagram && typeof result.mermaidDiagram === "string" && result.mermaidDiagram.trim()) {
+        const cleaned = result.mermaidDiagram.replace(/^```(?:mermaid)?\s*|\s*```$/g, "").trim();
+        if (/(?:graph\s+[A-Z]{2}|sequenceDiagram|classDiagram|flowchart|stateDiagram)/i.test(cleaned)) {
+            mermaidCode = cleaned;
+        }
+    }
+
+    // 2. Check for fenced ```mermaid ... ``` in hint
+    if (!mermaidCode && hintText) {
+        const fenced = hintText.match(/```mermaid\s*([\s\S]*?)```/i);
+        if (fenced) mermaidCode = fenced[1].trim();
+    }
+
+    // 3. Check for unfenced "mermaid\ngraph TD..." in hint (like LLMs frequently return)
+    if (!mermaidCode && hintText) {
+        const keywordMatch = hintText.match(/(?:^|\n)\s*mermaid\s*\n\s*((?:graph\s+[A-Z]{2}|flowchart|sequenceDiagram)[\s\S]*?)(?=\n\s*(?:##|[A-Z][a-zA-Z\s]{3,}:)|$)/i);
+        if (keywordMatch) {
+            mermaidCode = keywordMatch[1].trim();
+            // Wrap the unfenced mermaid in ```mermaid ... ``` in hintText!
+            hintText = hintText.replace(keywordMatch[0], `\n\n\`\`\`mermaid\n${mermaidCode}\n\`\`\`\n\n`);
+        }
+    }
+
+    // 4. Check for standalone "graph TD..." or "flowchart..." in hint
+    if (!mermaidCode && hintText) {
+        const standaloneMatch = hintText.match(/(?:^|\n)\s*((?:graph\s+(?:TD|LR|TB|BT|RL)|flowchart\s+(?:TD|LR|TB|BT|RL)|sequenceDiagram)[\s\S]*?)(?=\n\s*(?:##|[A-Z][a-zA-Z\s]{3,}:)|$)/i);
+        if (standaloneMatch) {
+            mermaidCode = standaloneMatch[1].trim();
+            hintText = hintText.replace(standaloneMatch[0], `\n\n\`\`\`mermaid\n${mermaidCode}\n\`\`\`\n\n`);
+        }
+    }
+
+    // 5. If architecture was explicitly requested (isArch) and still no mermaid code, use track blueprint diagram!
+    if (!mermaidCode && isArch) {
+        const pid = (projectId || "redis-clone").toLowerCase();
+        const trackKey = Object.keys(TRACK_ARCHITECTURES).find(k => pid.includes(k) || k.includes(pid)) || "redis-clone";
+        const arch = TRACK_ARCHITECTURES[trackKey];
+        if (arch && arch.mermaid) {
+            mermaidCode = arch.mermaid.trim();
+            hintText = `${hintText}\n\n\`\`\`mermaid\n${mermaidCode}\n\`\`\``;
+        }
+    }
+
+    // Inject the visual architecture diagram SVG link if not already present
+    if (mermaidCode && !hintText.includes("mermaid.ink/svg/")) {
+        const imgUrl = generateMermaidImageUrl(mermaidCode);
+        if (imgUrl) {
+            const visualImageMd = `\n\n### 📐 Visual Architecture Diagram\n![${projectTitle} Architecture Diagram](${imgUrl})\n\n`;
+            if (hintText.includes("```mermaid")) {
+                hintText = hintText.replace(/```mermaid/, `${visualImageMd}\`\`\`mermaid`);
+            } else {
+                hintText = `${hintText}${visualImageMd}\`\`\`mermaid\n${mermaidCode}\n\`\`\``;
+            }
+        }
+    }
+
+    result.hint = hintText;
+    return result;
 }
 
 /**
@@ -371,7 +501,32 @@ async function callGeminiMentor({
     const lineCount = lines.length;
     const numberedCode = lines.map((l, i) => `${String(i + 1).padStart(3, ' ')} | ${l}`).join('\n');
 
-    const systemPrompt = `You are "Forge Copilot", an elite Staff Engineer and coding mentor for SkillForge.
+    const isArch = isArchitectureQuery(userQuery);
+
+    let systemPrompt = "";
+    if (isArch) {
+        systemPrompt = `You are "Forge Copilot", an elite Principal Systems Architect and Staff Engineer for SkillForge.
+The developer is requesting the system architecture, component topology, and visual data flow for "${projectTitle}" (${language}).
+
+ARCHITECTURAL BLUEPRINT MANDATE:
+1. Provide an exhaustive, Staff-Engineer level architecture blueprint tailored strictly to ${projectTitle}.
+2. CRITICAL: Include a complete, syntactically valid Mermaid architecture diagram enclosed in a \`\`\`mermaid\ngraph TD... block inside the "hint" markdown field.
+3. Explicitly break down:
+   - High-Level Subsystems & Component Responsibilities
+   - Request-Response & Data Flow Pipeline (Step-by-Step)
+   - Concurrency, Mutex Locking & State Invariants
+   - Edge Cases & Production Failure Modes
+4. Output raw valid JSON strictly matching this schema:
+{
+  "diagnosis": "Executive architectural overview for ${projectTitle} (1-2 sentences)",
+  "hint": "The complete Markdown Architecture Blueprint including ## Headings, bullet points, data flow, and the \`\`\`mermaid\\ngraph TD... block",
+  "mermaidDiagram": "The standalone raw Mermaid diagram code string",
+  "targetLine": null,
+  "codePattern": "Core architectural interface or struct in ${language}",
+  "quickPrompts": ["How does concurrency scale under load?", "What happens during network partitions or crashes?", "Explain the internal buffer framing"]
+}`;
+    } else {
+        systemPrompt = `You are "Forge Copilot", an elite Staff Engineer and coding mentor for SkillForge.
 You guide developers building production-grade software (Redis in Rust, Raft in Go, Local RAG in Python, API Gateway in Go, Git in Rust, Canvas, Synthesizer).
 
 PEDAGOGICAL RULES:
@@ -389,6 +544,7 @@ PEDAGOGICAL RULES:
   "codePattern": "",
   "quickPrompts": ["3 short relevant follow-up questions user might ask"]
 }`;
+    }
 
     let promptText = `Project: ${projectTitle} (${language})
 Milestone ${milestoneIndex + 1}: ${milestoneTitle}
@@ -425,7 +581,7 @@ Return ONLY valid JSON.`;
             contents: [{ parts: [{ text: systemPrompt + "\n\n" + promptText }] }],
             generationConfig: {
                 temperature: 0.2,
-                maxOutputTokens: 1000,
+                maxOutputTokens: isArch ? 2500 : 1000,
                 responseMimeType: "application/json"
             }
         })
@@ -439,8 +595,418 @@ Return ONLY valid JSON.`;
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) return null;
 
-    return safelyParseAiJson(rawText, lineCount);
+    const parsed = safelyParseAiJson(rawText, lineCount);
+    return enrichWithMermaidSvg(parsed, projectTitle, projectId, isArch);
 }
+
+/**
+ * Staff-Engineer Architecture Blueprints & Mermaid Diagrams for all 8 SkillForge Tracks
+ */
+const TRACK_ARCHITECTURES = {
+    "redis-clone": {
+        title: "Redis In-Memory Database Server",
+        summary: "High-throughput in-memory key-value database built around a non-blocking TCP event loop, RESP framing, thread-safe memory storage, active TTL eviction, and RDB snapshotting.",
+        mermaid: `graph TD
+    Client[Redis CLI / TCP Clients] -->|RESP Raw Bytes / Sockets| Listener[TCP Listener & Event Loop]
+    Listener -->|Buffered Stream| Parser[RESP Parser & Frame Decoder]
+    Parser -->|Parsed AST / Command Tokens| Dispatcher[Command Dispatcher Engine]
+    
+    subgraph Execution Engine
+        Dispatcher -->|PING / ECHO| BasicOps[Core Protocol Handlers]
+        Dispatcher -->|SET / GET / DEL / INCR| KVStore[Thread-Safe In-Memory Store]
+        Dispatcher -->|SAVE / BGSAVE| Persistence[RDB Disk Snapshot Engine]
+    end
+
+    subgraph Memory & Eviction Subsystem
+        KVStore -->|Read / Write Mutex| MemoryMap[(Key-Value HashMap)]
+        KVStore -->|Expiration Timestamp| TTLWheel[Active TTL Eviction Worker]
+        KVStore -->|Memory Threshold Exceeded| LRUCache[O1 Doubly Linked List LRU]
+    end
+
+    Persistence -->|Binary Dump| DiskStorage[(dump.rdb File)]
+    BasicOps -->|RESP Serialized Reply| Formatter[RESP Serializer]
+    KVStore -->|RESP Serialized Reply| Formatter
+    Formatter -->|TCP Socket Flush| Client`,
+        blueprint: `### 1. High-Level System Overview
+The Redis Clone is an event-driven, in-memory data store providing sub-millisecond key-value operations over TCP sockets. Its architecture is divided into three primary planes:
+- **I/O Plane**: TCP listener accepting client socket streams and managing buffered frame reads.
+- **Protocol Plane (RESP)**: A robust framing engine decoding Simple Strings (\`+\`), Errors (\`-\`), Integers (\`:\`), Bulk Strings (\`$\`), and Arrays (\`*\`).
+- **Storage & Lifecycle Plane**: Thread-safe hash maps protected by read/write locks, with active TTL expiration and an O(1) doubly-linked list LRU eviction cache.
+
+### 2. Request & Execution Lifecycle
+1. **Connection Intake**: The TCP server binds to \`127.0.0.1:6379\` and handles connections concurrently via worker threads or async epoll.
+2. **Buffer Parsing**: Incoming bytes are scanned for CRLF (\`\\r\\n\`). Commands like \`SET key value EX 60\` are parsed into command vectors.
+3. **Command Dispatch**: The command dispatcher routes the command to the appropriate in-memory store handler.
+4. **Serialization & Flush**: The response is encoded into the RESP specification and flushed back to the client socket.
+
+### 3. Concurrency & Failure Invariants
+- **Atomic Mutation**: State modifications are locked using \`RwLock\` or \`Mutex\` to guarantee linearizability without race conditions.
+- **Buffer Delimiting**: Incomplete TCP frames are held in a connection buffer until the terminating CRLF arrives; commands are never processed prematurely.
+- **Graceful Persistence**: When \`SAVE\` or \`BGSAVE\` is executed, the storage engine serializes the memory map to disk without corrupting active read/write handles.`,
+        codePattern: `pub struct RedisServer {
+    listener: TcpListener,
+    store: Arc<RwLock<HashMap<String, Entry>>>,
+    lru_cache: Arc<Mutex<LruTracker>>,
+}
+
+pub struct Entry {
+    value: String,
+    expires_at: Option<Instant>,
+}`,
+        quickPrompts: [
+            "How do I handle partial TCP reads with CRLF?",
+            "How does the O(1) LRU eviction doubly-linked list work?",
+            "Explain RESP Array framing syntax"
+        ]
+    },
+    "collaborative-canvas": {
+        title: "Real-Time Collaborative Whiteboard Canvas",
+        summary: "Multi-user vector graphics engine with conflict-free replicated data types (CRDTs), WebSocket state replication, and sub-16ms 60fps rendering pipeline.",
+        mermaid: `graph TD
+    UserA[Client Browser A] -->|Pointer Events / Drawing| CanvasA[HTML5 2D Canvas Engine]
+    UserB[Client Browser B] -->|Pointer Events / Drawing| CanvasB[HTML5 2D Canvas Engine]
+
+    CanvasA -->|Local Mutation / State| CRDTA[Vector CRDT / LWW Engine]
+    CanvasB -->|Local Mutation / State| CRDTB[Vector CRDT / LWW Engine]
+
+    CRDTA -->|WebSocket Frame / JSON| WSServer[Node / WS Gateway Server]
+    CRDTB -->|WebSocket Frame / JSON| WSServer
+
+    subgraph Realtime Sync & Session Engine
+        WSServer --> RoomManager[Room & Presence Manager]
+        RoomManager --> LamportClock[Logical Timestamp Ordering]
+        RoomManager --> BroadcastQueue[Diff Pub/Sub Broadcaster]
+    end
+
+    BroadcastQueue -->|Remote Operations| CRDTA
+    BroadcastQueue -->|Remote Operations| CRDTB
+    CRDTA -->|Batch Render| CanvasA
+    CRDTB -->|Batch Render| CanvasB`,
+        blueprint: `### 1. High-Level System Overview
+The Collaborative Canvas coordinates concurrent drawing operations across multiple distributed browser clients with deterministic state convergence.
+- **Client Rendering Plane**: An HTML5 Canvas / WebGL viewport running a \`requestAnimationFrame\` render loop at 60 FPS.
+- **State Convergence Plane**: A Last-Write-Wins (LWW) Vector CRDT that assigns Lamport timestamps and peer IDs to every stroke and shape element.
+- **Transport Plane**: Bi-directional WebSockets transmitting compact operational diffs and cursor presence coordinates.
+
+### 2. Operational Lifecycle
+1. **Local Optimistic Rendering**: When a user drags or draws, the element is immediately rendered to the local canvas.
+2. **Operation Creation**: A unique element ID, path points, color, timestamp, and peer ID are bundled into a mutation event.
+3. **Broadcast & Conflict Resolution**: The WebSocket server broadcasts the mutation. Remote clients apply the operation; if two clients edit the same element simultaneously, the higher Lamport clock deterministically prevails.`,
+        codePattern: `interface CanvasElement {
+  id: string;
+  type: 'path' | 'rect' | 'circle' | 'text';
+  points: { x: number; y: number }[];
+  color: string;
+  strokeWidth: number;
+  lamportClock: number;
+  peerId: string;
+  isDeleted: boolean;
+}`,
+        quickPrompts: [
+            "How does Last-Write-Wins resolve concurrent stroke conflicts?",
+            "How do we optimize WebSocket frame transmission for fast cursor tracking?",
+            "How do we implement undo/redo with distributed CRDTs?"
+        ]
+    },
+    "url-shortener-distributed": {
+        title: "Distributed Fault-Tolerant URL Shortener",
+        summary: "High-scale URL shortener capable of handling 50k+ QPS with 64-bit Snowflake ID generation, Base62 encoding, multi-tier Redis caching, and async click analytics.",
+        mermaid: `graph TD
+    Client[Web Browser / API Client] -->|HTTP POST / GET| Gateway[API Gateway / Nginx Reverse Proxy]
+    
+    subgraph Routing & Identity Tier
+        Gateway --> AuthRate[Token Bucket Rate Limiter]
+        AuthRate --> IDGen[Snowflake 64-bit Distributed ID Generator]
+        IDGen --> Base62[Base62 Encoding Pipeline]
+    end
+
+    subgraph Caching & Storage Tier
+        Base62 -->|Check Cache L1| Redis[(Redis Cluster Cache)]
+        Redis -->|Cache Miss| Postgres[(PostgreSQL Sharded Database)]
+        Postgres -->|Hydrate L1| Redis
+    end
+
+    subgraph Async Analytics & Event Bus
+        Base62 -->|Click Stream Event| Kafka[Kafka / BullMQ Event Bus]
+        Kafka --> ClickWorker[Analytics Ingestion Worker]
+        ClickWorker --> ClickHouse[(ClickHouse Time-Series DB)]
+    end
+
+    Redis -->|301 / 302 Redirect| Gateway
+    Gateway -->|HTTP Redirect| Client`,
+        blueprint: `### 1. High-Level System Overview
+This distributed URL shortener achieves single-digit millisecond redirection latency at global scale:
+- **ID Generation Tier**: Twitter Snowflake algorithm generating 64-bit monotonically increasing IDs (Timestamp + Machine ID + Sequence) to avoid DB auto-increment lock contention.
+- **Encoding Tier**: Bijective Base62 conversion (\`[0-9a-zA-Z]\`) transforming 64-bit integers into 7-character vanity slugs.
+- **Multi-Tier Storage**: In-memory Redis cache with 80/20 LRU caching policy in front of sharded PostgreSQL.
+- **Asynchronous Analytics**: Clicks emit events to an asynchronous message queue so read redirects are never blocked by analytical database writes.`,
+        codePattern: `func GenerateSnowflakeID(nodeID int64, step int64) int64 {
+    timestamp := time.Now().UnixMilli() - CustomEpoch
+    return (timestamp << 22) | (nodeID << 12) | (step & 0xFFF)
+}
+
+func EncodeBase62(num int64) string {
+    const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    var encoded []byte
+    for num > 0 {
+        encoded = append(encoded, chars[num%62])
+        num /= 62
+    }
+    return string(reverse(encoded))
+}`,
+        quickPrompts: [
+            "Why use 302 vs 301 redirects for link analytics?",
+            "How do we prevent Snowflake clock-drift collisions?",
+            "How to size Redis cache memory for 100M links?"
+        ]
+    },
+    "local-rag-agent": {
+        title: "Local Offline RAG Agent with Vector Search",
+        summary: "Self-contained Retrieval-Augmented Generation agent with chunking pipelines, local vector embeddings, HNSW semantic retrieval, and grounded LLM generation.",
+        mermaid: `graph TD
+    Docs[PDF / Markdown / TXT Docs] --> TextSplitter[Recursive Chunking & Text Splitter]
+    TextSplitter -->|Chunk Batches| Embedder[Local Embedding Model / ONNX]
+    Embedder -->|Dense 384d Vectors| VectorIndex[(Local Vector Store / HNSW Index)]
+
+    UserQuery[User Query] --> QueryEmbedder[Query Vector Embedder]
+    QueryEmbedder -->|Vector Search| VectorIndex
+    VectorIndex -->|Top-K Cosine Matches| ContextAssembler[Context Ranking & Prompt Assembler]
+    
+    subgraph Local Inference Pipeline
+        ContextAssembler --> PromptTemplate[Grounding Prompt with Citations]
+        PromptTemplate --> LocalLLM[Local LLM Engine / GGUF]
+        LocalLLM --> StreamDecoder[Streaming Token Output]
+    end
+
+    StreamDecoder --> ChatUI[Interactive Copilot UI]`,
+        blueprint: `### 1. High-Level System Overview
+An offline, privacy-first RAG pipeline that runs entirely on local hardware without sending proprietary documents to external cloud APIs:
+- **Ingestion & Chunking**: Recursive character chunking with sliding window overlap (e.g. 512 tokens with 50-token overlap) to preserve contextual boundaries.
+- **Embedding Pipeline**: High-efficiency local ONNX embedding models (such as \`all-MiniLM-L6-v2\`) generating 384-dimensional dense semantic vectors.
+- **Vector Search Engine**: Approximate Nearest Neighbor (ANN) index using Hierarchical Navigable Small World (HNSW) graphs and Cosine Similarity scoring.
+- **Context Synthesis**: Injects the Top-K relevant retrieved passages into the grounded system prompt with strict citation constraints.`,
+        codePattern: `def retrieve_top_k(query_vec: np.ndarray, index_vectors: np.ndarray, k: int = 4):
+    # Cosine similarity: (A . B) / (||A|| * ||B||)
+    dots = np.dot(index_vectors, query_vec)
+    norms = np.linalg.norm(index_vectors, axis=1) * np.linalg.norm(query_vec)
+    scores = dots / (norms + 1e-9)
+    top_indices = np.argsort(scores)[::-1][:k]
+    return [(idx, scores[idx]) for idx in top_indices]`,
+        quickPrompts: [
+            "How to pick optimal chunk size and overlap for codebases?",
+            "How does HNSW graph navigation compare to Flat L2?",
+            "How to prevent hallucination when retrieved confidence is low?"
+        ]
+    },
+    "git-clone": {
+        title: "Git Version Control System",
+        summary: "Content-addressable object store, SHA-1 cryptographic hashing, zlib compression, staging index binary tree, and branch/commit reference tracking.",
+        mermaid: `graph TD
+    CLI[Git CLI Commands] --> CommandRouter[Command Dispatcher: init, hash-object, cat-file, commit]
+    
+    subgraph Plumbing & Hash Pipeline
+        CommandRouter --> Hasher[SHA-1 Content Digest & Header Framing]
+        Hasher --> Compression[Zlib Deflate / Inflate Engine]
+    end
+
+    subgraph Object Database .git/objects
+        Compression --> BlobStore[Blob: Raw File Content]
+        Compression --> TreeStore[Tree: Directory Hierarchy & Modes]
+        Compression --> CommitStore[Commit: Tree, Parents, Author, Timestamp]
+    end
+
+    subgraph Workspace & Index
+        CommandRouter --> StagingIndex[.git/index Binary File Staging Table]
+        CommandRouter --> RefManager[.git/refs Heads & HEAD Pointer]
+    end`,
+        blueprint: `### 1. High-Level System Overview
+Git is fundamentally a content-addressable directed acyclic graph (DAG) built on cryptographic SHA-1 hashes:
+- **Object Model**: Every object starts with a standardized header (\`type size\\0\`) followed by the content, hashed using SHA-1 and compressed via zlib deflate into \`.git/objects/xx/yyyy...\`.
+  - **Blob**: Unstructured file bytes.
+  - **Tree**: Directory listing mapping file modes, names, and SHA-1 hashes of child blobs and trees.
+  - **Commit**: Snapshot metadata containing root tree hash, parent commit hash(es), author, committer, and commit message.
+- **Staging Index (\`.git/index\`)**: Binary file storing stat metadata (mtime, ctime, file size) and SHA-1 hashes for fast change detection.
+- **Reference Management**: \`.git/refs/heads/\` stores branch pointers; \`HEAD\` references the active symbolic branch.`,
+        codePattern: `pub enum GitObject {
+    Blob(Vec<u8>),
+    Tree(Vec<TreeEntry>),
+    Commit(CommitData),
+}
+
+pub fn serialize_object(obj_type: &str, data: &[u8]) -> (String, Vec<u8>) {
+    let header = format!("{} {}\\0", obj_type, data.len());
+    let mut full = header.into_bytes();
+    full.extend_from_slice(data);
+    
+    let sha1 = format!("{:x}", Sha1::digest(&full));
+    let compressed = zlib::deflate(&full);
+    (sha1, compressed)
+}`,
+        quickPrompts: [
+            "How is the Git tree object encoded in binary?",
+            "How does .git/index detect file modifications without reading entire files?",
+            "Walk through three-way merge resolution"
+        ]
+    },
+    "api-gateway-proxy": {
+        title: "High-Performance API Gateway & Reverse Proxy",
+        summary: "Low-latency reverse proxy with token-bucket rate limiting, upstream round-robin load balancing, active health checks, and circuit-breaker fault tolerance.",
+        mermaid: `graph TD
+    Client[Client HTTP Requests] --> TLSListener[HTTP/HTTPS Listener & TLS Termination]
+    
+    subgraph Middleware Pipeline
+        TLSListener --> RateLimiter[Distributed Token Bucket Rate Limiter]
+        RateLimiter --> AuthValidator[JWT & API Key Validator]
+        AuthValidator --> CircuitBreaker[Circuit Breaker: Closed / Half-Open / Open]
+    end
+
+    subgraph Load Balancing & Upstream Routing
+        CircuitBreaker --> Router[Path Prefix & Header Router]
+        Router --> LoadBalancer[Round-Robin & Least-Connections Balancer]
+        LoadBalancer --> HealthChecker[Active HTTP Health Prober]
+    end
+
+    LoadBalancer --> SvcA[Auth Microservice]
+    LoadBalancer --> SvcB[Payment Microservice]
+    LoadBalancer --> SvcC[Users Microservice]`,
+        blueprint: `### 1. High-Level System Overview
+The API Gateway acts as the single entry point for all incoming microservices traffic:
+- **Connection & Security Plane**: TLS termination, CORS validation, and JWT verification.
+- **Traffic Shaping**: Token Bucket rate limiting enforcing strict per-IP or per-token request ceilings with instant HTTP 429 backpressure.
+- **Upstream Load Balancing**: Atomic round-robin and least-connections routing distributing traffic across healthy upstream backend pools.
+- **Fault Isolation (Circuit Breaker)**: Monitors upstream failure rates; automatically trips to OPEN when error rates exceed threshold (e.g. 50%), shedding load and returning HTTP 503 until health probes recover to HALF-OPEN.`,
+        codePattern: `type CircuitBreaker struct {
+    mu          sync.RWMutex
+    state       string // "CLOSED", "OPEN", "HALF_OPEN"
+    failureCount int
+    threshold    int
+    timeout      time.Duration
+    lastTripTime time.Time
+}
+
+func (cb *CircuitBreaker) AllowRequest() bool {
+    cb.mu.Lock()
+    defer cb.mu.Unlock()
+    if cb.state == "OPEN" {
+        if time.Since(cb.lastTripTime) > cb.timeout {
+            cb.state = "HALF_OPEN"
+            return true
+        }
+        return false
+    }
+    return true
+}`,
+        quickPrompts: [
+            "How does the Token Bucket algorithm handle bursty traffic?",
+            "How do we configure active vs passive health checks?",
+            "How does circuit breaker state transition between Open and Half-Open?"
+        ]
+    },
+    "audio-synthesizer": {
+        title: "Web Audio Modular Synthesizer",
+        summary: "Real-time polyphonic sound synthesis engine utilizing Web Audio API nodes, dual VCO oscillators, 24dB resonant low-pass VCF, and ADSR envelope modulation.",
+        mermaid: `graph TD
+    MIDI[MIDI Controller / Keyboard Input] --> VoiceManager[Polyphonic Voice Allocator]
+    
+    subgraph Sound Generation Core
+        VoiceManager --> OscA[VCO 1: Sawtooth / Square / Triangle]
+        VoiceManager --> OscB[VCO 2: Sub-Oscillator / Detune]
+        OscA --> Mixer[Oscillator Mixer Stage]
+        OscB --> Mixer
+    end
+
+    subgraph Modulation & Filter Matrix
+        LFO[Low Frequency Oscillator LFO] -->|Pitch Vibrato| OscA
+        LFO -->|Cutoff Frequency FM| Filter[Moog 24dB Resonant Low-Pass VCF]
+        Mixer --> Filter
+        ADSR[4-Stage ADSR Envelope Generator] -->|Envelope Modulation| Filter
+    end
+
+    Filter --> VCA[Voltage Controlled Amplifier VCA]
+    VCA --> FXDelay[Stereo Delay / Feedback Node]
+    FXDelay --> AudioOut[Web Audio Destination / Speakers]`,
+        blueprint: `### 1. High-Level System Overview
+A modular digital synthesizer implementing classic subtractive synthesis in real-time Web Audio:
+- **Voice Allocation**: Manages polyphonic voice stealing (oldest-note or lowest-velocity eviction) when key presses exceed voice count (e.g. 8 voices).
+- **Oscillator Section (VCO)**: Dual \`OscillatorNode\` sound generators producing harmonically rich waveforms (sawtooth, square, pulse-width modulated, triangle).
+- **Filter Section (VCF)**: A resonant 24dB/octave low-pass filter (\`BiquadFilterNode\`) sculpting frequency spectrum with adjustable Q resonance.
+- **Envelope Modulation (ADSR)**: Schedules parametric volume and cutoff sweeps using \`linearRampToValueAtTime\` and \`exponentialRampToValueAtTime\` for attack, decay, sustain, and release stages.`,
+        codePattern: `class Voice {
+  constructor(audioCtx, destination) {
+    this.ctx = audioCtx;
+    this.osc = this.ctx.createOscillator();
+    this.filter = this.ctx.createBiquadFilter();
+    this.vca = this.ctx.createGain();
+    
+    this.osc.connect(this.filter);
+    this.filter.connect(this.vca);
+    this.vca.connect(destination);
+  }
+
+  triggerAttack(freq, adsr, time = this.ctx.currentTime) {
+    this.osc.frequency.setValueAtTime(freq, time);
+    this.vca.gain.cancelScheduledValues(time);
+    this.vca.gain.setValueAtTime(0.001, time);
+    this.vca.gain.linearRampToValueAtTime(1.0, time + adsr.attack);
+    this.vca.gain.exponentialRampToValueAtTime(adsr.sustain, time + adsr.attack + adsr.decay);
+  }
+}`,
+        quickPrompts: [
+            "Why use exponential ramps vs linear ramps for audio decay?",
+            "How does polyphonic voice stealing work when keys are released?",
+            "How to prevent audio popping/clicking on sudden note stops?"
+        ]
+    },
+    "cicd-runner": {
+        title: "Containerized CI/CD Job Runner",
+        summary: "Distributed pipeline orchestration engine with isolated Docker sandbox containers, real-time log streaming over WebSockets, artifact caching, and git checkout.",
+        mermaid: `graph TD
+    Webhook[Git Push / PR Webhook] --> QueueManager[Redis / DB Job Queue]
+    QueueManager --> Dispatcher[Runner Worker Pool Dispatcher]
+    
+    subgraph Job Execution Sandbox
+        Dispatcher --> WorkspaceInit[Workspace Cloner & Secret Injector]
+        WorkspaceInit --> DockerDriver[Docker Engine / Container Sandbox]
+        DockerDriver --> StepRunner[Step-by-Step Shell Command Executor]
+    end
+
+    subgraph Observability & Artifacts
+        StepRunner --> LogStreamer[Real-Time WebSocket Log Streamer]
+        StepRunner --> ArtifactCache[Build Artifact & Dependency Cache]
+    end
+
+    StepRunner --> StatusReporter[GitHub Commit Status API Reporter]
+    LogStreamer --> TerminalUI[Live Terminal Console]`,
+        blueprint: `### 1. High-Level System Overview
+An industrial CI/CD pipeline executor running untrusted arbitrary code in hardened isolation:
+- **Queue & Scheduling**: Incoming webhook triggers push jobs to a priority queue; runner workers poll tasks with heartbeats and lease renewals.
+- **Container Isolation**: Each pipeline job spins up a disposable Docker container with resource constraints (cgroups limiting CPU, memory, and disk I/O, plus non-root execution).
+- **Execution Engine**: Parses \`.skillforge-ci.yml\` pipeline definitions into sequential or parallel steps, capturing stdout/stderr streams.
+- **Log Streaming & Telemetry**: WebSocket multiplexer streaming line-buffered logs directly to developer consoles with ANSI escape color parsing.`,
+        codePattern: `interface PipelineStep {
+  name: string;
+  image: string;
+  commands: string[];
+  env: Record<string, string>;
+  timeoutSeconds: number;
+}
+
+async function executeStep(step: PipelineStep, containerId: string, logStream: Writable) {
+  const exec = await docker.getContainer(containerId).exec({
+    Cmd: ["sh", "-c", step.commands.join(" && ")],
+    AttachStdout: true,
+    AttachStderr: true,
+  });
+  const stream = await exec.start({ hijack: true, stdin: false });
+  stream.pipe(logStream);
+}`,
+        quickPrompts: [
+            "How to securely inject secrets without exposing them in container layers?",
+            "How to optimize dependency caching across pipeline runs?",
+            "How to handle container timeouts and orphan process cleanup?"
+        ]
+    }
+};
 
 /**
  * Domain Knowledge Base: Comprehensive milestone specifications, common errors,
@@ -924,6 +1490,49 @@ function analyzeWithExpertHeuristics({
     // INTENT 1: Specific User Question Matching
     // -------------------------------------------------------------
     if (query) {
+        // Query: "architecture" / "system design" / "diagram" / "topology"
+        if (isArchitectureQuery(query)) {
+            const arch = TRACK_ARCHITECTURES[trackKey] || TRACK_ARCHITECTURES[pid] || {
+                title: `${projectTitle} Architecture`,
+                summary: `Modular system architecture for ${projectTitle} (${language}), organizing responsibilities across I/O handling, state management, and protocol execution.`,
+                mermaid: `graph TD
+    Client[Client / Driver] -->|Request / Event| Gateway[Core Controller / Engine]
+    Gateway -->|Parse & Validate| Logic[Business & Protocol Logic]
+    Logic -->|State Update| Store[(In-Memory / Persistent Store)]
+    Logic -->|Response| Gateway
+    Gateway -->|Output| Client`,
+                blueprint: `### 1. Component Hierarchy
+- **Entry / Interface Layer**: Handles I/O connections, command dispatching, and protocol formatting.
+- **Processing Core**: Implements milestone business logic, state machines, and data validation.
+- **Storage Subsystem**: Manages memory storage, concurrency locks, and persistence boundaries.
+
+### 2. Invariants & Key Constraints
+- Ensure strict input bounds and clean error propagation.
+- Handle partial reads and delimiter framing gracefully.`,
+                codePattern: `// Architectural core interface
+pub trait SystemEngine {
+    fn execute(&mut self, command: &str) -> Result<String, SystemError>;
+}`,
+                quickPrompts: [
+                    "What are the key failure modes?",
+                    "How does the state machine handle errors?",
+                    "What concurrency primitives should I use?"
+                ]
+            };
+
+            const imgUrl = generateMermaidImageUrl(arch.mermaid);
+            const diagramMarkdown = `\n\n### 📐 Visual Architecture Diagram\n![${arch.title} Architecture Diagram](${imgUrl})\n\n\`\`\`mermaid\n${arch.mermaid}\n\`\`\`\n\n${arch.blueprint}`;
+
+            return {
+                diagnosis: `Staff Architecture Blueprint: ${arch.title}`,
+                level: hintLevel,
+                targetLine: null,
+                hint: `${arch.summary}\n${diagramMarkdown}`,
+                codePattern: arch.codePattern || (hintLevel === 3 ? (milestoneInfo.pattern || "") : ""),
+                quickPrompts: arch.quickPrompts || ["How does data flow between components?", "What edge cases exist?", "Show code pattern"]
+            };
+        }
+
         // Query: "why did test fail?"
         if (query.includes("why") && (query.includes("fail") || query.includes("test") || query.includes("error"))) {
             if (failedStep) {
@@ -955,10 +1564,10 @@ function analyzeWithExpertHeuristics({
             };
         }
 
-        // Query: "architecture" / "explain milestone"
-        if (query.includes("architect") || query.includes("explain") || query.includes("objective")) {
+        // Query: "explain milestone" / "objective"
+        if (query.includes("explain") || query.includes("objective")) {
             return {
-                diagnosis: `Milestone ${milestoneIndex + 1} Architecture: ${milestoneInfo.title || milestoneTitle}`,
+                diagnosis: `Milestone ${milestoneIndex + 1} Specification: ${milestoneInfo.title || milestoneTitle}`,
                 level: hintLevel,
                 targetLine: null,
                 hint: `${milestoneInfo.concept || milestoneObjective}\n\nKey Requirement: Implement this subsystem modularly and ensure clean separation of concerns before advancing to Stage ${milestoneIndex + 2}.`,
@@ -1065,6 +1674,9 @@ function findLineNumber(code, keywords = []) {
 }
 
 module.exports = {
-    getAiMentorAdvice
+    getAiMentorAdvice,
+    isArchitectureQuery,
+    generateMermaidImageUrl,
+    TRACK_ARCHITECTURES
 };
 

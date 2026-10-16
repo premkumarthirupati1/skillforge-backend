@@ -1,4 +1,5 @@
 const Course = require('../models/course');
+const { isArchitectureQuery, generateMermaidImageUrl, TRACK_ARCHITECTURES } = require('./aiMentorService');
 
 /**
  * Forge Copilot Unified Backend Service
@@ -59,6 +60,18 @@ function generateFallbackResponse({ mode, userMessage, context, catalog }) {
     }
 
     if (mode === "coding") {
+        if (isArchitectureQuery(text)) {
+            const pid = (context?.project?.projectId || "redis-clone").toLowerCase();
+            const trackKey = Object.keys(TRACK_ARCHITECTURES).find(k => pid.includes(k) || k.includes(pid)) || "redis-clone";
+            const arch = TRACK_ARCHITECTURES[trackKey];
+            const imgUrl = generateMermaidImageUrl(arch.mermaid);
+            return {
+                reply: `### Staff Architecture Blueprint: ${arch.title}\n\n${arch.summary}\n\n### 📐 Visual Architecture Diagram\n![${arch.title} Architecture Diagram](${imgUrl})\n\n\`\`\`mermaid\n${arch.mermaid}\n\`\`\`\n\n${arch.blueprint}\n\n\`\`\`${context?.project?.language || 'rust'}\n${arch.codePattern}\n\`\`\``,
+                suggestions: arch.quickPrompts,
+                recommendedCourses: []
+            };
+        }
+
         return {
             reply: `I've analyzed your project context. When debugging or planning your implementation:\n\n- **Check Preconditions**: Ensure data structures and types match the expected specification.\n- **Isolate Assertions**: Run tests individually to isolate the first failing invariant.\n- **Error Boundary**: Add defensive assertions before returning state.\n\nFeel free to paste the exact error log or describe what behavior you observe versus what is expected!`,
             suggestions: [
@@ -96,6 +109,7 @@ async function chatWithCopilot({
 }) {
     const catalog = await getPublishedCourseCatalog();
     const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content || "";
+    const isArch = isArchitectureQuery(lastUserMessage);
 
     // 1. Build contextual system prompt
     let systemPrompt = `You are "Forge Copilot", the official intelligent coding and learning assistant integrated into SkillForge.
@@ -106,6 +120,10 @@ BRANDING & IDENTITY:
 - SkillForge is an elite hands-on engineering platform where learners master software development by building real production systems with automated test suites, interactive Monaco IDE, and guided curriculum.
 - Maintain a polished, professional developer-tool experience: clear hierarchy, encouraging tone, high technical accuracy, concise explanations, and actionable guidance.
 - When generating code, use clean markdown code blocks with explicit language tags (e.g. \`\`\`javascript, \`\`\`typescript, \`\`\`python, \`\`\`rust, \`\`\`go, \`\`\`bash).
+- ARCHITECTURAL BLUEPRINTS & DIAGRAMS:
+  Whenever the user asks for architecture, system design, topology, data flow, or components, you MUST provide an authoritative, Staff-Engineer level architecture blueprint.
+  CRITICAL: Include a complete, syntactically valid Mermaid diagram enclosed in a \`\`\`mermaid\ngraph TD... block.
+  Break down the components, data flow, concurrency model, and failure invariants in clean Markdown.
 ${isAgent ? `
 AGENT AUTONOMOUS MODE ACTIVE:
 - Operate with deep technical rigor as an autonomous staff engineer / system architect.
@@ -195,14 +213,24 @@ RESPONSIBILITIES:
                         ...recentMessages
                     ],
                     temperature: 0.3,
-                    max_tokens: 1400
+                    max_tokens: isArch ? 2800 : 1400
                 })
             });
 
             if (response.ok) {
                 const data = await response.json();
-                const replyText = data?.choices?.[0]?.message?.content;
+                let replyText = data?.choices?.[0]?.message?.content;
                 if (replyText) {
+                    if (replyText.includes("```mermaid") && !replyText.includes("mermaid.ink/svg/")) {
+                        const mermaidMatch = replyText.match(/```mermaid\s*([\s\S]*?)```/i);
+                        if (mermaidMatch) {
+                            const imgUrl = generateMermaidImageUrl(mermaidMatch[1]);
+                            if (imgUrl) {
+                                replyText = replyText.replace(/```mermaid/, `### 📐 Visual Architecture Diagram\n![System Architecture Diagram](${imgUrl})\n\n\`\`\`mermaid`);
+                            }
+                        }
+                    }
+
                     const matchedCourses = findRelevantCourses(lastUserMessage + " " + replyText, catalog);
                     
                     // Generate smart follow-up suggestions based on mode
