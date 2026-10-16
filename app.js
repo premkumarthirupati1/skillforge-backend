@@ -15,6 +15,7 @@ const reviewRoutes = require('./routes/review');
 const paymentRoutes = require('./routes/payment');
 const runnerRoutes = require('./routes/runner');
 const projectRoutes = require('./routes/project');
+const copilotRoutes = require('./routes/copilot');
 const errorHandler = require('./middlewares/errorHandler');
 const { globalLimiter } = require('./middlewares/rateLimiter');
 const { applySecurityLayer } = require('./middlewares/security');
@@ -121,6 +122,8 @@ app.use('/api/runner', runnerRoutes);
 app.use('/runner', runnerRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/projects', projectRoutes);
+app.use('/api/copilot', copilotRoutes);
+app.use('/copilot', copilotRoutes);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
