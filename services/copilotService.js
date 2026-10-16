@@ -91,7 +91,8 @@ function generateFallbackResponse({ mode, userMessage, context, catalog }) {
 async function chatWithCopilot({
     mode = "global",
     messages = [],
-    context = {}
+    context = {},
+    isAgent = false
 }) {
     const catalog = await getPublishedCourseCatalog();
     const lastUserMessage = [...messages].reverse().find(m => m.role === "user")?.content || "";
@@ -105,6 +106,12 @@ BRANDING & IDENTITY:
 - SkillForge is an elite hands-on engineering platform where learners master software development by building real production systems with automated test suites, interactive Monaco IDE, and guided curriculum.
 - Maintain a polished, professional developer-tool experience: clear hierarchy, encouraging tone, high technical accuracy, concise explanations, and actionable guidance.
 - When generating code, use clean markdown code blocks with explicit language tags (e.g. \`\`\`javascript, \`\`\`typescript, \`\`\`python, \`\`\`rust, \`\`\`go, \`\`\`bash).
+${isAgent ? `
+AGENT AUTONOMOUS MODE ACTIVE:
+- Operate with deep technical rigor as an autonomous staff engineer / system architect.
+- Provide a systematic diagnostic trace: Root Cause -> Invariant Analysis -> Step-by-Step Remediation -> Edge Case Verification.
+- When inspecting code or test failures, pinpoint the exact logical flaws and provide production-grade, test-passing solutions.
+` : ''}
 `;
 
     if (mode === "global") {

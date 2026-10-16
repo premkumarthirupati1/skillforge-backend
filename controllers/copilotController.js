@@ -6,7 +6,7 @@ const copilotService = require('../services/copilotService');
  */
 exports.handleCopilotChat = async (req, res, next) => {
     try {
-        const { mode = "global", messages = [], context = {} } = req.body;
+        const { mode = "global", messages = [], context = {}, isAgent = false } = req.body;
 
         if (!Array.isArray(messages) || messages.length === 0) {
             return res.status(400).json({
@@ -28,7 +28,8 @@ exports.handleCopilotChat = async (req, res, next) => {
         const result = await copilotService.chatWithCopilot({
             mode: validatedMode,
             messages,
-            context: enrichedContext
+            context: enrichedContext,
+            isAgent: Boolean(isAgent)
         });
 
         return res.status(200).json({
