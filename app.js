@@ -2,6 +2,8 @@ const express = require('express');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const nodemailer = require('nodemailer');
 
 const enrollmentRoutes = require('./routes/enrollment');
 const authRoutes = require('./routes/auth');
@@ -14,14 +16,14 @@ const paymentRoutes = require('./routes/payment');
 const runnerRoutes = require('./routes/runner');
 const projectRoutes = require('./routes/project');
 const errorHandler = require('./middlewares/errorHandler');
-const cookieParser = require('cookie-parser');
 const { globalLimiter } = require('./middlewares/rateLimiter');
+const { applySecurityLayer } = require('./middlewares/security');
 
 dotenv.config();
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(cookieParser());
+
 const MONGODB_URI = `mongodb+srv://premkumar:e5PxeZu0OVUW0QYQ@cluster0.plkx2k6.mongodb.net/skillforge?retryWrites=true&w=majority`;
 
 const configuredFrontend = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/+$/, '') : null;
@@ -32,18 +34,10 @@ const allowedOrigins = [
     "http://127.0.0.1:5173"
 ].filter(Boolean);
 
-app.use((req, res, next) => {
-    const connectSources = allowedOrigins.join(" ");
-    res.setHeader(
-        "Content-Security-Policy",
-        `default-src 'self'; connect-src 'self' ${connectSources}`
-    );
-    next();
-});
+// 1. Enterprise Security Layer (Helmet Headers, CSP, HSTS, Audit Logging, HPP)
+const [mongoSanitizer, xssSanitizer] = applySecurityLayer(app, { allowedOrigins });
 
-app.use('/uploads', express.static('uploads'));
-app.use('/api/lessons', lessonRoutes);
-
+// 2. Hardened CORS Configuration
 app.use(cors({
     origin: function (origin, callback) {
         if (!origin || allowedOrigins.includes(origin)) {
@@ -52,13 +46,27 @@ app.use(cors({
             callback(new Error('Not allowed by CORS'));
         }
     },
-    credentials: true
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    credentials: true,
+    maxAge: 86400 // 24h preflight cache
 }));
 
-app.use(globalLimiter);
-app.use(express.json());
+// 3. Request Body Parsing with Strict Payload Limits (DoS / Memory Exhaustion Defense)
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+app.use(cookieParser());
 
-const nodemailer = require('nodemailer');
+// 4. NoSQL Injection & Stored XSS Sanitizers
+app.use(mongoSanitizer);
+app.use(xssSanitizer);
+
+// 5. Global Rate Limiting
+app.use(globalLimiter);
+
+// 6. Static Uploads
+app.use('/uploads', express.static('uploads'));
+app.use('/api/lessons', lessonRoutes);
 
 app.get('/health', (req, res) => {
     res.json({
