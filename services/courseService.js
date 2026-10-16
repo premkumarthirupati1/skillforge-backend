@@ -57,15 +57,15 @@ exports.getCourseInfo = async ({ courseId, userId }) => {
 
     const { course, modules, lessons } = courseStructure;
 
-    if (!course.isPublished && course.instructorId.toString() !== userId.toString()) {
+    if (!course.isPublished && (!userId || course.instructorId.toString() !== userId.toString())) {
         throw new Error("Course is not available.");
     }
 
     // 2. Fetch user-specific enrollment
-    const enrollment = await Enrollment.findOne({
+    const enrollment = userId ? await Enrollment.findOne({
         userId,
         courseId
-    });
+    }) : null;
 
     const structuredModules = modules.map(module => {
         const moduleLessons = lessons

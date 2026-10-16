@@ -1,6 +1,7 @@
 const express = require('express');
 const courseController = require('../controllers/course');
 const { protect } = require('../middlewares/protect');
+const { optionalAuth } = require('../middlewares/optionalAuth');
 const { upload } = require('../middlewares/upload');
 const { authorizeRoles } = require('../middlewares/authorizeRoles');
 const { searchLimiter } = require('../middlewares/rateLimiter');
@@ -19,8 +20,7 @@ router.post(
 
 router.get(
   '/:courseId/full',
-  protect,
-  authorizeRoles("student", "instructor", "admin"),
+  optionalAuth,
   courseController.getCourseInfo
 );
 

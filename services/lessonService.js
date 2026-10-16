@@ -133,8 +133,7 @@ const completeLesson = async ({ lessonId, userId }) => {
         }
         nextLessonId = nextLesson ? nextLesson._id : null;
     }
-    lesson.completed = !lesson.completed;
-    await lesson.save();
+
     return {
         progress,
         isCompleted: !isAlreadyComplete,
