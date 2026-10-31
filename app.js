@@ -11,6 +11,7 @@ const courseRoutes = require('./routes/course');
 const moduleRoutes = require('./routes/module');
 const lessonRoutes = require('./routes/lesson');
 const profileRoutes = require('./routes/profile');
+const settingsRoutes = require('./routes/settings');
 const reviewRoutes = require('./routes/review');
 const paymentRoutes = require('./routes/payment');
 const runnerRoutes = require('./routes/runner');
@@ -110,6 +111,9 @@ app.get('/test-email', async (req, res) => {
     }
 });
 
+// Mounted Routes
+app.use('/user/settings', settingsRoutes);
+app.use('/api/settings', settingsRoutes);
 app.use('/user', profileRoutes);
 app.use('/auth', authRoutes);
 app.use('/course', courseRoutes);

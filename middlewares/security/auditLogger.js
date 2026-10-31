@@ -4,6 +4,22 @@
  * rate-limit triggers (429), and internal exceptions (500),
  * logging structured security telemetry for incident response.
  */
+
+const logSecurityEvent = ({ event, userId = null, email = null, ip = 'unknown', userAgent = 'unknown', status = null, details = null }) => {
+    const logEntry = {
+        timestamp: new Date().toISOString(),
+        event,
+        userId: userId ? String(userId) : null,
+        email: email ? String(email).toLowerCase() : null,
+        ip,
+        userAgent: userAgent ? userAgent.substring(0, 150) : 'unknown',
+        status,
+        details: details || {}
+    };
+
+    console.warn(`[SECURITY EVENT] ${JSON.stringify(logEntry)}`);
+};
+
 const securityAuditLogger = (req, res, next) => {
     const startTime = Date.now();
     const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
@@ -34,4 +50,7 @@ const securityAuditLogger = (req, res, next) => {
     next();
 };
 
-module.exports = { securityAuditLogger };
+module.exports = { 
+    securityAuditLogger,
+    logSecurityEvent
+};

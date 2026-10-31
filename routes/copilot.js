@@ -10,4 +10,8 @@ router.post('/chat', optionalAuth, searchLimiter, copilotController.handleCopilo
 // Copilot Catalog endpoint
 router.get('/courses', optionalAuth, copilotController.getCopilotCourses);
 
+// Automated AI Code Review endpoints
+router.post('/code-review', optionalAuth, searchLimiter, copilotController.handleCodeReview);
+router.get('/reviews/:projectId', optionalAuth, copilotController.getProjectReviews);
+
 module.exports = router;

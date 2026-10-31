@@ -45,4 +45,4 @@ enrollmentSchema.index(
     { userId: 1, courseId: 1 },
     { unique: true }
 );
-module.exports = mongoose.model('Enrollment', enrollmentSchema);
+module.exports = mongoose.models.Enrollment || mongoose.model('Enrollment', enrollmentSchema);

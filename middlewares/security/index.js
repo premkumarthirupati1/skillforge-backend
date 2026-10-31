@@ -2,7 +2,7 @@ const { configureSecurityHeaders } = require('./securityHeaders');
 const { mongoSanitizer } = require('./mongoSanitize');
 const { xssSanitizer } = require('./xssSanitizer');
 const { hppSanitizer } = require('./hppSanitizer');
-const { securityAuditLogger } = require('./auditLogger');
+const { securityAuditLogger, logSecurityEvent } = require('./auditLogger');
 
 /**
  * Applies the entire defense-in-depth security layer to an Express application:
@@ -41,5 +41,6 @@ module.exports = {
     mongoSanitizer,
     xssSanitizer,
     hppSanitizer,
-    securityAuditLogger
+    securityAuditLogger,
+    logSecurityEvent
 };
